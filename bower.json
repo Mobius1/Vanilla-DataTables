@@ -1,9 +1,0 @@
-{
-    "name": "vanilla-datatables",
-    "version": "1.6.5",
-    "main": "src/vanilla-dataTables.js",
-    "ignore": [
-        ".gitattributes",
-        "README.md"
-    ]
-}

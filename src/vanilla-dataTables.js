@@ -4,10 +4,10 @@
  * Copyright (c) 2015-2017 Karl Saunders (http://mobius.ovh)
  * Licensed under MIT (http://www.opensource.org/licenses/mit-license.php)
  *
- * Version: 1.6.5
+ * Version: 2.0.0-alpha.4
  *
  */
-(function (root, factory) {
+(function(root, factory) {
     var plugin = "DataTable";
 
     if (typeof define === "function" && define.amd) {
@@ -17,7 +17,7 @@
     } else {
         root[plugin] = factory(plugin);
     }
-})(this, function (plugin) {
+})(this, function(plugin) {
     "use strict";
     var win = window,
         doc = document,
@@ -53,6 +53,26 @@
         header: true,
         footer: false,
 
+        search: {
+            includeHiddenColumns: false
+        },
+
+        classes: {
+            table: "dataTable-table",
+            wrapper: "dataTable-wrapper",
+            container: "dataTable-container",
+            top: "dataTable-top",
+            bottom: "dataTable-bottom",
+            info: "dataTable-info",
+            dropdown: "dataTable-dropdown",
+            selector: "dataTable-selector",
+            pagination: "dataTable-pagination",
+            input: "dataTable-input",
+            search: "dataTable-search",
+            ellipsis: "dataTable-ellipsis",
+            sorter: "dataTable-sorter"
+        },
+
         // Customise the display text
         labels: {
             placeholder: "Search...", // The search input placeholder
@@ -72,7 +92,7 @@
      * Check is item is object
      * @return {Boolean}
      */
-    var isObject = function (val) {
+    var isObject = function(val) {
         return Object.prototype.toString.call(val) === "[object Object]";
     };
 
@@ -80,7 +100,7 @@
      * Check is item is array
      * @return {Boolean}
      */
-    var isArray = function (val) {
+    var isArray = function(val) {
         return Array.isArray(val);
     };
 
@@ -89,7 +109,7 @@
      * @param  {String}   str
      * @return {Boolean|Array|Object}
      */
-    var isJson = function (str) {
+    var isJson = function(str) {
         var t = !1;
         try {
             t = JSON.parse(str);
@@ -105,7 +125,7 @@
      * @param  {Object} t
      * @return {Object}
      */
-    var extend = function (src, props) {
+    var extend = function(src, props) {
         for (var prop in props) {
             if (props.hasOwnProperty(prop)) {
                 var val = props[prop];
@@ -122,34 +142,29 @@
 
     /**
      * Iterator helper
-     * @param  {(Array|Object)}   arr     Any object, array or array-like collection.
-     * @param  {Function}         fn      Callback
-     * @param  {Object}           scope   Change the value of this
+     * @param  {(Array|Object|Number)}   arr     Any number, object, array or array-like collection.
+     * @param  {Function}         fn             Callback
+     * @param  {Object}           scope          Change the value of this
      * @return {Void}
      */
-    var each = function (arr, fn, scope) {
+    var each = function(arr, fn, scope) {
         var n;
+
         if (isObject(arr)) {
             for (n in arr) {
                 if (Object.prototype.hasOwnProperty.call(arr, n)) {
                     fn.call(scope, arr[n], n);
                 }
             }
-        } else {
+        } else if (isArray(arr)) {
             for (n = 0; n < arr.length; n++) {
                 fn.call(scope, arr[n], n);
             }
+        } else {
+            for (n = 0; n < arr; n++) {
+                fn.call(scope, n + 1, n);
+            }
         }
-    };
-
-    /**
-     * Add event listener to target
-     * @param  {Object} el
-     * @param  {String} e
-     * @param  {Function} fn
-     */
-    var on = function (el, e, fn) {
-        el.addEventListener(e, fn, false);
     };
 
     /**
@@ -158,7 +173,7 @@
      * @param  {Object}   b properties and attributes
      * @return {Object}
      */
-    var createElement = function (a, b) {
+    var createElement = function(a, b) {
         var d = doc.createElement(a);
         if (b && "object" == typeof b) {
             var e;
@@ -173,10 +188,10 @@
         return d;
     };
 
-    var flush = function (el, ie) {
+    var empty = function(el, ie) {
         if (el instanceof NodeList) {
-            each(el, function (e) {
-                flush(e, ie);
+            each(el, function(e) {
+                empty(e, ie);
             });
         } else {
             if (ie) {
@@ -190,25 +205,11 @@
     };
 
     /**
-     * Create button helper
-     * @param  {String}   c
-     * @param  {Number}   p
-     * @param  {String}   t
-     * @return {Object}
-     */
-    var button = function (c, p, t) {
-        return createElement("li", {
-            class: c,
-            html: '<a href="#" data-page="' + p + '">' + t + "</a>"
-        });
-    };
-
-    /**
      * classList shim
      * @type {Object}
      */
     var classList = {
-        add: function (s, a) {
+        add: function(s, a) {
             if (s.classList) {
                 s.classList.add(a);
             } else {
@@ -217,7 +218,7 @@
                 }
             }
         },
-        remove: function (s, a) {
+        remove: function(s, a) {
             if (s.classList) {
                 s.classList.remove(a);
             } else {
@@ -229,7 +230,7 @@
                 }
             }
         },
-        contains: function (s, a) {
+        contains: function(s, a) {
             if (s)
                 return s.classList ?
                     s.classList.contains(a) :
@@ -239,91 +240,142 @@
     };
 
     /**
-     * Bubble sort algorithm
+     * Create button helper
+     * @param  {String}   c
+     * @param  {Number}   p
+     * @param  {String}   t
+     * @return {Object}
      */
-    var sortItems = function (a, b) {
-        var c, d;
-        if (1 === b) {
-            c = 0;
-            d = a.length;
-        } else {
-            if (b === -1) {
-                c = a.length - 1;
-                d = -1;
-            }
-        }
-        for (var e = !0; e;) {
-            e = !1;
-            for (var f = c; f != d; f += b) {
-                if (a[f + b] && a[f].value > a[f + b].value) {
-                    var g = a[f],
-                        h = a[f + b],
-                        i = g;
-                    a[f] = h;
-                    a[f + b] = i;
-                    e = !0;
-                }
-            }
-        }
-        return a;
-    };
-
-    /**
-     * Pager truncation algorithm
-     */
-    var truncate = function (a, b, c, d, ellipsis) {
-        d = d || 2;
-        var j,
-            e = 2 * d,
-            f = b - d,
-            g = b + d,
-            h = [],
-            i = [];
-        if (b < 4 - d + e) {
-            g = 3 + e;
-        } else if (b > c - (3 - d + e)) {
-            f = c - (2 + e);
-        }
-        for (var k = 1; k <= c; k++) {
-            if (1 == k || k == c || (k >= f && k <= g)) {
-                var l = a[k - 1];
-                classList.remove(l, "active");
-                h.push(l);
-            }
-        }
-        each(h, function (c) {
-            var d = c.children[0].getAttribute("data-page");
-            if (j) {
-                var e = j.children[0].getAttribute("data-page");
-                if (d - e == 2) i.push(a[e]);
-                else if (d - e != 1) {
-                    var f = createElement("li", {
-                        class: "ellipsis",
-                        html: '<a href="#">' + ellipsis + "</a>"
-                    });
-                    i.push(f);
-                }
-            }
-            i.push(c);
-            j = c;
+    var button = function(c, p, t) {
+        return createElement("li", {
+            class: c,
+            html: '<a href="#" data-page="' + p + '">' + t + "</a>"
         });
-
-        return i;
     };
 
     /**
-     * Parse data to HTML table
+     * Use moment.js to parse cell contents for sorting
+     * @param  {String} content     The datetime string to parse
+     * @param  {String} format      The format for moment to use
+     * @return {String|Boolean}     Datatime string or false
      */
-    var dataToTable = function (data) {
+    var parseDate = function(content, format) {
+        var date = false;
+
+        // moment() throws a fit if the string isn't a valid datetime string
+        // so we need to supply the format to the constructor (https://momentjs.com/docs/#/parsing/string-format/)
+
+        // Converting to YYYYMMDD ensures we can accurately sort the column numerically
+
+        if (format && win.moment) {
+            switch (format) {
+                case "ISO_8601":
+                    date = moment(content, moment.ISO_8601).format("YYYYMMDD");
+                    break;
+                case "RFC_2822":
+                    date = moment(content, "ddd, MM MMM YYYY HH:mm:ss ZZ").format("YYYYMMDD");
+                    break;
+                case "MYSQL":
+                    date = moment(content, "YYYY-MM-DD hh:mm:ss").format("YYYYMMDD");
+                    break;
+                case "UNIX":
+                    date = moment(content).unix();
+                    break;
+                    // User defined format using the data-format attribute or columns[n].format option
+                default:
+                    date = moment(content, format).format("YYYYMMDD");
+                    break;
+            }
+        }
+
+        return date;
+    };
+
+    var Cell = function(cell, index) {
+        this.node = cell;
+        this.content = cell.innerHTML;
+
+        this.hidden = false;
+
+        this.index = this.node.dataIndex = index;
+
+        if (this.node.nodeName === "TD") {
+            this.type = "cell";
+        } else if (this.node.nodeName === "TH") {
+            this.type = "heading";
+        }
+    };
+
+    Cell.prototype.setContent = function(content) {
+        this.originalContent = this.content;
+        this.content = this.node.innerHTML = content;
+    };
+
+    var Row = function(row, index) {
+
+        if (isArray(row)) {
+            this.node = createElement("tr");
+
+            each(row, function(val, i) {
+                this.node.appendChild(createElement("td", {
+                    html: val
+                }))
+            }, this);
+        } else {
+            this.node = row;
+
+            this.isHeader = row.parentNode.nodeName === "THEAD";
+        }
+
+        if (!this.isHeader) {
+            this.index = this.node.dataIndex = index - 1;
+        }
+
+        this.cells = [].slice.call(this.node.cells).map(function(cell, i) {
+            return new Cell(cell, i, this);
+        }, this);
+    };
+
+    var Table = function(table, data, instance) {
+        this.node = table;
+
+        if (typeof table === "string") {
+            this.node = document.querySelector(table);
+        }
+
+        if (data) {
+            this.build(data);
+        }
+
+        this.rows = [].slice.call(this.node.rows).map(function(row, i) {
+            return new Row(row, i, this);
+        }, this);
+
+        this.body = this.node.tBodies[0];
+
+        if (this.rows[0].isHeader) {
+            this.hasHeader = true;
+
+            this.header = this.rows[0];
+
+            this.rows.shift();
+
+            if (instance.config.searchable) {
+                each(this.header.cells, function(cell) {
+                    classList.add(cell.node, instance.config.classes.sorter);
+                });
+            }
+        }
+    };
+
+    Table.prototype.build = function(data) {
         var thead = false,
             tbody = false;
-
-        data = data || this.options.data;
 
         if (data.headings) {
             thead = createElement("thead");
             var tr = createElement("tr");
-            each(data.headings, function (col) {
+            each(data.headings, function(col) {
                 var td = createElement("th", {
                     html: col
                 });
@@ -335,16 +387,9 @@
 
         if (data.data && data.data.length) {
             tbody = createElement("tbody");
-            each(data.data, function (rows) {
-                if (data.headings) {
-                    if (data.headings.length !== rows.length) {
-                        throw new Error(
-                            "The number of rows do not match the number of headings."
-                        );
-                    }
-                }
+            each(data.data, function(rows) {
                 var tr = createElement("tr");
-                each(rows, function (value) {
+                each(rows, function(value) {
                     var td = createElement("td", {
                         html: value
                     });
@@ -355,1238 +400,712 @@
         }
 
         if (thead) {
-            if (this.table.tHead !== null) {
-                this.table.removeChild(this.table.tHead);
+            if (this.node.tHead !== null) {
+                this.node.removeChild(this.node.tHead);
             }
-            this.table.appendChild(thead);
+            this.node.appendChild(thead);
         }
 
         if (tbody) {
-            if (this.table.tBodies.length) {
-                this.table.removeChild(this.table.tBodies[0]);
+            if (this.node.tBodies.length) {
+                this.node.removeChild(this.node.tBodies[0]);
             }
-            this.table.appendChild(tbody);
+            this.node.appendChild(tbody);
         }
     };
 
-    /**
-     * Use moment.js to parse cell contents for sorting
-     * @param  {String} content     The datetime string to parse
-     * @param  {String} format      The format for moment to use
-     * @return {String|Boolean}     Datatime string or false
-     */
-    var parseDate = function (content, format) {
-        var date = false;
+    Table.prototype.addRow = function(row, at) {
+        if (row instanceof Row) {
+            this.rows.splice(at || 0, 0, row);
 
-        // moment() throws a fit if the string isn't a valid datetime string
-        // so we need to supply the format to the constructor (https://momentjs.com/docs/#/parsing/string-format/)
+            this.update();
 
-        // Converting to YYYYMMDD ensures we can accurately sort the column numerically
-
-        if (format) {
-            switch (format) {
-            case "ISO_8601":
-                date = moment(content, moment.ISO_8601).format("YYYYMMDD");
-                break;
-            case "RFC_2822":
-                date = moment(content, "ddd, MM MMM YYYY HH:mm:ss ZZ").format("YYYYMMDD");
-                break;
-            case "MYSQL":
-                date = moment(content, "YYYY-MM-DD hh:mm:ss").format("YYYYMMDD");
-                break;
-            case "UNIX":
-                date = moment(content).unix();
-                break;
-                // User defined format using the data-format attribute or columns[n].format option
-            default:
-                date = moment(content, format).format("YYYYMMDD");
-                break;
-            }
+            return row;
         }
-
-        return date;
     };
 
-    /**
-     * Columns API
-     * @param {Object} instance DataTable instance
-     * @param {Mixed} columns  Column index or array of column indexes
-     */
-    var Columns = function (dt) {
-        this.dt = dt;
-        return this;
+    Table.prototype.removeRow = function(row) {
+        if (row instanceof Row) {
+            this.rows.splice(row.index, 1);
+
+            this.update();
+        }
     };
 
-    /**
-     * Swap two columns
-     * @return {Void}
-     */
-    Columns.prototype.swap = function (columns) {
-        if (columns.length && columns.length === 2) {
-            var cols = [];
+    Table.prototype.update = function(data) {
+        each(this.rows, function(row, i) {
+            row.index = i;
+        });
+    };
 
-            // Get the current column indexes
-            each(this.dt.headings, function (h, i) {
-                cols.push(i);
+    // PAGER
+    var Pager = function(instance, parent) {
+        this.instance = instance;
+        this.parent = parent;
+    };
+
+    Pager.prototype.render = function(pages) {
+        pages = pages || this.instance.totalPages;
+
+        var o = this.instance.config;
+
+        empty(this.parent, this.isIE);
+
+        if (pages > 1) {
+            var that = this,
+                c = "pager",
+                ul = createElement("ul"),
+                prev = this.instance.onFirstPage ? 1 : this.instance.currentPage - 1,
+                next = this.instance.onlastPage ? pages : this.instance.currentPage + 1;
+
+            // first button
+            if (o.firstLast) {
+                ul.appendChild(button(c, 1, o.firstText));
+            }
+
+            // prev button
+            if (o.nextPrev) {
+                ul.appendChild(button(c, prev, o.prevText));
+            }
+
+            var pager = this.truncate();
+            // append the links
+            each(pager, function(btn) {
+                ul.appendChild(btn);
             });
 
-            var x = columns[0];
-            var y = columns[1];
-            var b = cols[y];
-            cols[y] = cols[x];
-            cols[x] = b;
+            // next button
+            if (o.nextPrev) {
+                ul.appendChild(button(c, next, o.nextText));
+            }
 
-            this.order(cols);
+            // first button
+            if (o.firstLast) {
+                ul.appendChild(button(c, pages, o.lastText));
+            }
+
+            this.parent.appendChild(ul);
         }
     };
 
-    /**
-     * Reorder the columns
-     * @return {Array} columns  Array of ordered column indexes
-     */
-    Columns.prototype.order = function (columns) {
+    Pager.prototype.truncate = function() {
+        var that = this,
+            o = that.instance.config,
+            delta = o.pagerDelta * 2,
+            page = that.instance.currentPage,
+            left = page - o.pagerDelta,
+            right = page + o.pagerDelta,
+            pages = that.instance.totalPages,
+            range = [],
+            pager = [],
+            n;
 
-        var a, b, c, d, h, s, cell,
-            temp = [
-                [],
-                [],
-                [],
-                []
-            ],
-            dt = this.dt;
+        // No need to truncate if it's disabled
+        if (!o.truncatePager) {
+            each(pages, function(index) {
+                pager.push(button(index == page ? "active" : "", index, index));
+            });
+        } else {
+            if (page < 4 - o.pagerDelta + delta) {
+                right = 3 + delta;
+            } else if (page > pages - (3 - o.pagerDelta + delta)) {
+                left = pages - (2 + delta);
+            }
 
-        // Order the headings
-        each(columns, function (column, x) {
-            h = dt.headings[column];
-            s = h.getAttribute("data-sortable") !== "false";
-            a = h.cloneNode(true);
-            a.originalCellIndex = x;
-            a.sortable = s;
+            // Get the links that will be visible
+            for (var i = 1; i <= pages; i++) {
+                if (i == 1 || i == pages || (i >= left && i <= right)) {
+                    range.push(i);
+                }
+            }
 
-            temp[0].push(a);
+            each(range, function(index) {
+                if (n) {
+                    if (index - n == 2) {
+                        pager.push(button("", n + 1, n + 1));
+                    } else if (index - n != 1) {
+                        // Create ellipsis node
+                        pager.push(button(o.classes.ellipsis, 0, o.ellipsisText));
+                    }
+                }
 
-            if (dt.hiddenColumns.indexOf(column) < 0) {
-                b = h.cloneNode(true);
-                b.originalCellIndex = x;
-                b.sortable = s;
+                pager.push(button(index == page ? "active" : "", index, index));
+                n = index;
+            });
+        }
 
-                temp[1].push(b);
+        return pager;
+    };
+
+    // ROWS
+    var Rows = function(instance) {
+        this.instance = instance;
+    };
+
+    Rows.prototype.render = function(page) {
+        page = page || this.instance.currentPage;
+
+        if (page < 1 || page > this.instance.totalPages) return;
+
+        var that = this,
+            head = this.instance.table.header,
+            fragment = document.createDocumentFragment();
+
+        empty(head.node);
+        each(head.cells, function(cell) {
+            if (!cell.hidden) {
+                head.node.appendChild(cell.node);
             }
         });
 
-        // Order the row cells
-        each(dt.data, function (row, i) {
-            c = row.cloneNode();
-            d = row.cloneNode();
+        each(this.instance.pages[page - 1], function(row) {
+            empty(row.node);
 
-            c.dataIndex = d.dataIndex = i;
-
-            if (row.searchIndex !== null && row.searchIndex !== undefined) {
-                c.searchIndex = d.searchIndex = row.searchIndex;
-            }
-
-            // Append the cell to the fragment in the correct order
-            each(columns, function (column, x) {
-                cell = row.cells[column].cloneNode(true);
-                cell.data = row.cells[column].data;
-                c.appendChild(cell);
-
-                if (dt.hiddenColumns.indexOf(column) < 0) {
-                    cell = row.cells[column].cloneNode(true);
-                    cell.data = row.cells[column].data;
-                    d.appendChild(cell);
+            each(row.cells, function(cell) {
+                if (!cell.hidden) {
+                    row.node.appendChild(cell.node);
                 }
             });
 
-            temp[2].push(c);
-            temp[3].push(d);
+            fragment.append(row.node);
         });
 
-        dt.headings = temp[0];
-        dt.activeHeadings = temp[1];
+        empty(this.instance.table.body);
 
-        dt.data = temp[2];
-        dt.activeRows = temp[3];
+        this.instance.table.body.appendChild(fragment);
 
-        // Update
+        each(this.instance.pagers, function(pager) {
+            pager.render();
+        });
+    };
+
+    Rows.prototype.paginate = function() {
+        var o = this.instance.config,
+            rows = this.instance.table.rows,
+            dt = this.instance;
+
+        if (dt.searching && dt.searchData) {
+            rows = dt.searchData;
+        }
+
+        dt.pages = rows
+            .map(function(tr, i) {
+                return i % o.perPage === 0 ? rows.slice(i, i + o.perPage) : null;
+            })
+            .filter(function(page) {
+                return page;
+            });
+
+        dt.totalPages = dt.pages.length;
+    };
+
+    Rows.prototype.add = function(row, at) {
+        if (isArray(row)) {
+            at = at || 0;
+
+            row = this.instance.table.addRow(new Row(row, this.instance.table.rows.length + 1), at);
+            this.instance.update();
+
+            return row;
+        }
+    };
+
+    Rows.prototype.remove = function(obj) {
+        var row = false,
+            rows = this.instance.table.rows;
+
+        if (obj instanceof Row || obj instanceof Element) {
+            for (var n = 0; n < rows.length; n++) {
+                if (rows[n].node === obj || rows[n] === obj) {
+                    row = rows[n];
+                    break;
+                }
+            }
+        } else {
+            row = rows[obj];
+        }
+
+        if (row) {
+            this.instance.table.removeRow(row);
+            this.instance.update();
+        }
+
+        return row;
+    };
+
+    // COLUMNS
+    var Columns = function(instance) {
+        this.instance = instance;
+    };
+
+    Columns.prototype.sort = function(column, direction) {
+        column = column || 0;
+        direction = direction || "asc";
+
+        var dt = this.instance,
+            node = dt.table.header.cells[column].node,
+            rows = dt.table.rows;
+
+        if (dt.searching && dt.searchData) {
+            rows = dt.searchData;
+        }
+
+        // Remove class from previus column
+        if (dt.lastHeading) {
+            classList.remove(dt.lastHeading, dt.lastDirection);
+        }
+
+        if (dt.lastDirection) {
+            classList.remove(node, dt.lastDirection);
+        }
+
+        classList.add(node, direction);
+
+        var format, datetime;
+
+        // Check for date format and moment.js
+        if (node.getAttribute("data-type") === "date") {
+            format = false;
+            datetime = node.hasAttribute("data-format");
+
+            if (datetime) {
+                format = node.getAttribute("data-format");
+            }
+        }
+
+        rows.sort(function(a, b) {
+            a = a.cells[column].content;
+            b = b.cells[column].content
+
+            if (datetime) {
+                a = parseDate(format === "UNIX" ? parseInt(a, 10) : a, format);
+                b = parseDate(format === "UNIX" ? parseInt(b, 10) : b, format);
+            } else {
+                a = a.replace(/(\$|\,|\s|%)/g, "");
+                a = b.replace(/(\$|\,|\s|%)/g, "");
+            }
+
+            return direction === "asc" ? a > b : a < b;
+        });
+
+        dt.update();
+
+        dt.lastHeading = node;
+        dt.lastDirection = direction;
+    };
+
+    Columns.prototype.order = function(order) {
+        var dt = this.instance,
+            head = dt.table.header,
+            rows = dt.table.rows,
+            arr;
+
+        // Reorder the header
+        if (dt.table.hasHeader) {
+            arr = [];
+            each(order, function(column, i) {
+                arr[i] = head.cells[column];
+
+                // rearrange the tr node cells for rendering
+                head.node.appendChild(head.cells[column].node);
+            });
+            head.cells = arr;
+        }
+
+        // Reorder the body
+        each(rows, function(row) {
+            arr = [];
+            each(order, function(column, i) {
+                arr[i] = row.cells[column];
+
+                row.node.appendChild(row.cells[column].node);
+            });
+            row.cells = arr;
+        });
+
         dt.update();
     };
 
-    /**
-     * Hide columns
-     * @return {Void}
-     */
-    Columns.prototype.hide = function (columns) {
-        if (columns.length) {
-            var dt = this.dt;
-
-            each(columns, function (column) {
-                if (dt.hiddenColumns.indexOf(column) < 0) {
-                    dt.hiddenColumns.push(column);
-                }
-            });
-
-            this.rebuild();
-        }
-    };
-
-    /**
-     * Show columns
-     * @return {Void}
-     */
-    Columns.prototype.show = function (columns) {
-        if (columns.length) {
-            var index, dt = this.dt;
-
-            each(columns, function (column) {
-                index = dt.hiddenColumns.indexOf(column);
-                if (index > -1) {
-                    dt.hiddenColumns.splice(index, 1);
-                }
-            });
-
-            this.rebuild();
-        }
-    };
-
-    /**
-     * Check column(s) visibility
-     * @return {Boolean}
-     */
-    Columns.prototype.visible = function (columns) {
-        var cols, dt = this.dt;
-
-        columns = columns || dt.headings.map(function (th) {
-            return th.originalCellIndex;
-        });
+    Columns.prototype.hide = function(columns) {
+        var that = this,
+            dt = this.instance,
+            head = dt.table.header,
+            rows = dt.table.rows;
 
         if (!isNaN(columns)) {
-            cols = dt.hiddenColumns.indexOf(columns) < 0;
+            columns = [columns];
+        }
+
+        for (var n = 0; n < columns.length; n++) {
+            each(head.cells, function(cell) {
+                if (columns[n] == cell.index) {
+                    cell.hidden = true;
+                }
+            });
+
+            each(rows, function(row) {
+                each(row.cells, function(cell) {
+                    if (columns[n] == cell.index) {
+                        cell.hidden = true;
+                    }
+                });
+            });
+        }
+
+        this.instance.update();
+    };
+
+    Columns.prototype.show = function(columns) {
+        var that = this,
+            dt = this.instance,
+            head = dt.table.header,
+            rows = dt.table.rows;
+
+        if (!isNaN(columns)) {
+            columns = [columns];
+        }
+
+        for (var n = 0; n < columns.length; n++) {
+            each(head.cells, function(cell) {
+                if (columns[n] == cell.index) {
+                    cell.hidden = false;
+                }
+            });
+
+            each(rows, function(row) {
+                each(row.cells, function(cell) {
+                    if (columns[n] == cell.index) {
+                        cell.hidden = false;
+                    }
+                });
+            });
+        }
+
+        this.instance.update();
+    };
+
+    Columns.prototype.visible = function(columns) {
+        var that = this,
+            dt = this.instance,
+            head = dt.table.header,
+            cols;
+
+        if (columns === undefined) {
+            columns = head.cells.map(function(cell) {
+                return cell.index;
+            });
+        }
+
+        if (!isNaN(columns)) {
+            cols = !head.cells[columns].hidden;
         } else if (isArray(columns)) {
             cols = [];
-            each(columns, function (column) {
-                cols.push(dt.hiddenColumns.indexOf(column) < 0);
+            each(columns, function(column) {
+                cols.push(!head.cells[column].hidden);
             });
         }
 
         return cols;
     };
 
-    /**
-     * Add a new column
-     * @param {Object} data
-     */
-    Columns.prototype.add = function (data) {
-        var that = this,
-            td, th = document.createElement("th");
+    Columns.prototype.fix = function() {
+        each(
+            this.instance.columnWidths,
+            function(size, cell) {
+                var w = size / this.instance.rect.width * 100;
+                this.instance.table.header.cells[cell].node.style.width = w + "%";
+            },
+            this
+        );
+    };
 
-        if (!this.dt.headings.length) {
-            this.dt.insert({
-                headings: [data.heading],
-                data: data.data.map(function (i) {
-                    return [i];
-                })
-            });
-            this.rebuild();
-            return;
+    var Ajax = function(config) {
+        this.config = config;
+        this.request = new XMLHttpRequest();
+
+        this.events = {
+            load: this.load.bind(this),
+            error: this.error.bind(this),
+            abort: this.abort.bind(this),
+            progress: this.progress.bind(this)
+        };
+
+        this.request.addEventListener("load", this.events.load);
+        this.request.addEventListener("error", this.events.error);
+        this.request.addEventListener("abort", this.events.abort);
+        this.request.addEventListener("progress", this.events.progress);
+    };
+
+    Ajax.prototype.send = function() {
+        this.request.open("GET", this.config.url);
+        this.request.send();
+    };
+
+    Ajax.prototype.load = function() {
+        if (this.request.readyState === 4) {
+            if (this.request.status === 200) {
+                if (this.config.load && typeof this.config.load === "function") {
+                    this.config.load.call(this);
+                }
+            }
+        }
+    };
+
+    Ajax.prototype.error = function() {};
+    Ajax.prototype.abort = function() {};
+    Ajax.prototype.progress = function() {};
+
+    var Exporter = function(instance) {
+        this.config = {
+            download: true,
+            skipColumns: [],
+
+            // csv
+            lineDelimiter: "\n",
+            columnDelimiter: ",",
+
+            // sql
+            tableName: "myTable",
+
+            // json
+            replacer: null,
+            space: 4
+        };
+
+        this.instance = instance;
+    };
+
+    Exporter.prototype.export = function(config) {
+        if (config && isObject(config)) {
+            this.config = extend(this.config, config);
+        }
+        switch (this.config.type.toLowerCase()) {
+            case "json":
+                this.toJSON();
+                break;
+            case "sql":
+                this.toSQL();
+                break;
+        }
+    };
+
+    Exporter.prototype.toJSON = function(config) {
+
+        if (config && isObject(config)) {
+            this.config = extend(this.config, config);
         }
 
-        if (!this.dt.hiddenHeader) {
-            if (data.heading.nodeName) {
-                th.appendChild(data.heading);
+        this.config.type = "json";
+
+        var str = "",
+            data = [],
+            o = this.config,
+            table = this.instance.table;
+
+        each(table.rows, function(row, n) {
+            data[n] = data[n] || {};
+
+            each(row.cells, function(cell, i) {
+                if (!cell.hidden && o.skipColumns.indexOf(cell.index) < 0) {
+                    data[n][table.header.cells[cell.index].content] = table.rows[n].cells[cell.index].content;
+                }
+            })
+        });
+
+        // Convert the array of objects to JSON string
+        str = JSON.stringify(data, this.config.replacer, this.config.space);
+
+        if (this.config.download) {
+            str = "data:application/json;charset=utf-8," + str;
+
+            this.download(str);
+        }
+
+        return str;
+    };
+
+    Exporter.prototype.toCSV = function(config) {
+        if (config && isObject(config)) {
+            this.config = extend(this.config, config);
+        }
+
+        this.config.type = "csv";
+
+        var str = "",
+            data = [],
+            o = this.config,
+            table = this.instance.table;
+
+        each(table.rows, function(row, n) {
+            data[n] = data[n] || {};
+
+            each(row.cells, function(cell, i) {
+                if (!cell.hidden && o.skipColumns.indexOf(cell.index) < 0) {
+                    str += cell.content + o.columnDelimiter;
+                }
+            });
+
+            // Remove trailing column delimiter
+            str = str.trim().substring(0, str.length - 1);
+
+            // Apply line delimiter
+            str += o.lineDelimiter;
+        });
+
+        // Remove trailing line delimiter
+        str = str.trim().substring(0, str.length - 1);
+
+        if (o.download) {
+            str = "data:text/csv;charset=utf-8," + str;
+            this.download(str);
+        }
+    };
+
+    Exporter.prototype.toSQL = function(config) {
+        if (config && isObject(config)) {
+            this.config = extend(this.config, config);
+        }
+
+        this.config.type = "sql";
+
+        var o = this.config,
+            table = this.instance.table;
+
+        // Begin INSERT statement
+        var str = "INSERT INTO `" + o.tableName + "` (";
+
+        // Convert table headings to column names
+        each(table.header.cells, function(cell) {
+            if (!cell.hidden && o.skipColumns.indexOf(cell.index) < 0) {
+                str += "`" + cell.content + "`,";
+            }
+        });
+
+        // Remove trailing comma
+        str = str.trim().substring(0, str.length - 1);
+
+        // Begin VALUES
+        str += ") VALUES ";
+
+        // Iterate rows and convert cell data to column values
+        each(table.rows, function(row) {
+            str += "(";
+
+            each(row.cells, function(cell) {
+                if (!cell.hidden && o.skipColumns.indexOf(cell.index) < 0) {
+                    str += "`" + cell.content + "`,";
+                }
+            });
+
+            // Remove trailing comma
+            str = str.trim().substring(0, str.length - 1);
+
+            // end VALUES
+            str += "),";
+        });
+
+        // Remove trailing comma
+        str = str.trim().substring(0, str.length - 1);
+
+        // Add trailing colon
+        str += ";";
+
+        if (o.download) {
+            str = "data:application/sql;charset=utf-8," + str;
+
+            this.download(str);
+        }
+
+        return str;
+    };
+
+    Exporter.prototype.download = function(str) {
+
+        // Download
+        if (str) {
+            // Filename
+            this.config.filename = this.config.filename || "datatable_export";
+            this.config.filename += "." + this.config.type;
+
+            str = encodeURI(str);
+
+            // Create a link to trigger the download
+            var link = createElement("a");
+            link.href = str;
+            link.download = this.config.filename;
+
+            // Append the link
+            body.appendChild(link);
+
+            // Trigger the download
+            link.click();
+
+            // Remove the link
+            body.removeChild(link);
+        }
+    };
+
+    // MAIN LIB
+    var DataTable = function(table, config) {
+        this.config = extend(defaultConfig, config);
+
+        if (this.config.ajax) {
+            var that = this;
+
+            this.request = new Ajax({
+                url: typeof ajax === "string" ? that.config.ajax : that.config.ajax.url,
+                load: function() {
+                    var obj = {};
+                    obj.data = that.config.ajax.load ? that.config.ajax.load.call(that, this.request) : this.request.responseText;
+
+                    obj.type = "json";
+
+                    if (that.config.ajax.content && that.config.ajax.content.type) {
+                        obj.type = that.config.ajax.content.type;
+                        obj = extend(obj, that.config.ajax.content);
+                    }
+
+                    that.table = new Table(table, obj.data, that);
+
+                    that.init();
+                }
+            });
+
+            this.request.send();
+        } else {
+            if (this.config.data) {
+                this.table = new Table(table, this.config.data, this);
             } else {
-                th.innerHTML = data.heading;
-            }
-        } else {
-            th.innerHTML = "";
-        }
-
-        this.dt.headings.push(th);
-
-        each(this.dt.data, function (row, i) {
-            if (data.data[i]) {
-                td = document.createElement("td");
-
-                if (data.data[i].nodeName) {
-                    td.appendChild(data.data[i]);
-                } else {
-                    td.innerHTML = data.data[i];
-                }
-
-                td.data = td.innerHTML;
-
-                if (data.render) {
-                    td.innerHTML = data.render.call(that, td.data, td, row);
-                }
-
-                row.appendChild(td);
-            }
-        });
-
-        if (data.type) {
-            th.setAttribute("data-type", data.type);
-        }
-        if (data.format) {
-            th.setAttribute("data-format", data.format);
-        }
-
-        if (data.hasOwnProperty("sortable")) {
-            th.sortable = data.sortable;
-            th.setAttribute("data-sortable", data.sortable === true ? "true" : "false");
-        }
-
-        this.rebuild();
-
-        this.dt.renderHeader();
-    };
-
-    /**
-     * Remove column(s)
-     * @param  {Array|Number} select
-     * @return {Void}
-     */
-    Columns.prototype.remove = function (select) {
-        if (isArray(select)) {
-            // Remove in reverse otherwise the indexes will be incorrect
-            select.sort(function (a, b) {
-                return b - a;
-            });
-
-            each(select, function (column) {
-                this.remove(column);
-            }, this);
-        } else {
-            this.dt.headings.splice(select, 1);
-
-            each(this.dt.data, function (row) {
-                row.removeChild(row.cells[select]);
-            });
-        }
-
-        this.rebuild();
-    };
-
-    /**
-     * Sort by column
-     * @param  {int} column - The column no.
-     * @param  {string} direction - asc or desc
-     * @return {void}
-     */
-    Columns.prototype.sort = function (column, direction, init) {
-
-        var dt = this.dt;
-
-        // Check column is present
-        if (dt.hasHeadings && (column < 1 || column > dt.activeHeadings.length)) {
-            return false;
-        }
-
-        dt.sorting = true;
-
-        // Convert to zero-indexed
-        column = column - 1;
-
-        var dir,
-            rows = dt.data,
-            alpha = [],
-            numeric = [],
-            a = 0,
-            n = 0,
-            th = dt.activeHeadings[column];
-
-        column = th.originalCellIndex;
-
-        each(rows, function (tr) {
-            var cell = tr.cells[column];
-            var content = cell.data;
-            var num = content.replace(/(\$|\,|\s|%)/g, "");
-
-            // Check for date format and moment.js
-            if (th.getAttribute("data-type") === "date" && win.moment) {
-                var format = false,
-                    formatted = th.hasAttribute("data-format");
-
-                if (formatted) {
-                    format = th.getAttribute("data-format");
-                }
-
-                num = parseDate(content, format);
+                this.table = new Table(table, false, this);
             }
 
-            if (parseFloat(num) == num) {
-                numeric[n++] = {
-                    value: Number(num),
-                    row: tr
-                };
-            } else {
-                alpha[a++] = {
-                    value: content,
-                    row: tr
-                };
-            }
-        });
-
-        /* Sort according to direction (ascending or descending) */
-        var top, btm;
-        if (classList.contains(th, "asc") || direction == "asc") {
-            top = sortItems(alpha, -1);
-            btm = sortItems(numeric, -1);
-            dir = "descending";
-            classList.remove(th, "asc");
-            classList.add(th, "desc");
-        } else {
-            top = sortItems(numeric, 1);
-            btm = sortItems(alpha, 1);
-            dir = "ascending";
-            classList.remove(th, "desc");
-            classList.add(th, "asc");
-        }
-
-        /* Clear asc/desc class names from the last sorted column's th if it isn't the same as the one that was just clicked */
-        if (dt.lastTh && th != dt.lastTh) {
-            classList.remove(dt.lastTh, "desc");
-            classList.remove(dt.lastTh, "asc");
-        }
-
-        dt.lastTh = th;
-
-        /* Reorder the table */
-        rows = top.concat(btm);
-
-        dt.data = [];
-        var indexes = [];
-
-        each(rows, function (v, i) {
-            dt.data.push(v.row);
-
-            if (v.row.searchIndex !== null && v.row.searchIndex !== undefined) {
-                indexes.push(i);
-            }
-        }, dt);
-
-        dt.searchData = indexes;
-
-        this.rebuild();
-
-        dt.update();
-
-        if (!init) {
-            dt.emit("datatable.sort", column, dir);
+            this.init();
         }
     };
 
-    /**
-     * Rebuild the columns
-     * @return {Void}
-     */
-    Columns.prototype.rebuild = function () {
-        var a, b, c, d, dt = this.dt,
-            temp = [];
-
-        dt.activeRows = [];
-        dt.activeHeadings = [];
-
-        each(dt.headings, function (th, i) {
-            th.originalCellIndex = i;
-            th.sortable = th.getAttribute("data-sortable") !== "false";
-            if (dt.hiddenColumns.indexOf(i) < 0) {
-                dt.activeHeadings.push(th);
-            }
-        }, this);
-
-        // Loop over the rows and reorder the cells
-        each(dt.data, function (row, i) {
-            a = row.cloneNode();
-            b = row.cloneNode();
-
-            a.dataIndex = b.dataIndex = i;
-
-            if (row.searchIndex !== null && row.searchIndex !== undefined) {
-                a.searchIndex = b.searchIndex = row.searchIndex;
-            }
-
-            // Append the cell to the fragment in the correct order
-            each(row.cells, function (cell) {
-                c = cell.cloneNode(true);
-                c.data = cell.data;
-                a.appendChild(c);
-
-                if (dt.hiddenColumns.indexOf(cell.cellIndex) < 0) {
-                    d = cell.cloneNode(true);
-                    d.data = cell.data;
-                    b.appendChild(d);
-                }
-            });
-
-            // Append the fragment with the ordered cells
-            temp.push(a);
-            dt.activeRows.push(b);
-        });
-
-        dt.data = temp;
-
-        dt.update();
-    };
-
-    /**
-     * Rows API
-     * @param {Object} instance DataTable instance
-     * @param {Array} rows
-     */
-    var Rows = function (dt, rows) {
-        this.dt = dt;
-        this.rows = rows;
-
-        return this;
-    };
-
-    /**
-     * Build a new row
-     * @param  {Array} row
-     * @return {HTMLElement}
-     */
-    Rows.prototype.build = function (row) {
-        var td, tr = createElement("tr");
-
-        var headings = this.dt.headings;
-
-        if (!headings.length) {
-            headings = row.map(function () {
-                return "";
-            });
-        }
-
-        each(headings, function (h, i) {
-            td = createElement("td");
-
-            // Fixes #29
-            if (!row[i] && !row[i].length) {
-                row[i] = "";
-            }
-
-            td.innerHTML = row[i];
-
-            td.data = row[i];
-
-            tr.appendChild(td);
-        });
-
-        return tr;
-    };
-
-    Rows.prototype.render = function (row) {
-        return row;
-    };
-
-    /**
-     * Add new row
-     * @param {Array} select
-     */
-    Rows.prototype.add = function (data) {
-
-        if (isArray(data)) {
-            var dt = this.dt;
-            // Check for multiple rows
-            if (isArray(data[0])) {
-                each(data, function (row, i) {
-                    dt.data.push(this.build(row));
-                }, this);
-            } else {
-                dt.data.push(this.build(data));
-            }
-
-            // We may have added data to an empty table
-            if ( dt.data.length ) {
-                dt.hasRows = true;
-            }
-
-
-            this.update();
-
-            dt.columns().rebuild();
-        }
-    };
-
-    /**
-     * Remove row(s)
-     * @param  {Array|Number} select
-     * @return {Void}
-     */
-    Rows.prototype.remove = function (select) {
-
-        var dt = this.dt;
-
-        if (isArray(select)) {
-            // Remove in reverse otherwise the indexes will be incorrect
-            select.sort(function (a, b) {
-                return b - a;
-            });
-
-            each(select, function (row, i) {
-                dt.data.splice(row, 1);
-            });
-        } else {
-            dt.data.splice(select, 1);
-        }
-
-        this.update();
-        dt.columns().rebuild();
-    };
-
-    /**
-     * Update row indexes
-     * @return {Void}
-     */
-    Rows.prototype.update = function () {
-        each(this.dt.data, function (row, i) {
-            row.dataIndex = i;
-        });
-    };
-
-    ////////////////////
-    //    MAIN LIB    //
-    ////////////////////
-
-    var DataTable = function (table, options) {
-        this.initialized = false;
-
-        // user options
-        this.options = extend(defaultConfig, options);
-
-        if (typeof table === "string") {
-            var selector = table;
-            table = document.querySelector(table);
-
-            if (!table) {
-                throw new Error("The element '" + selector + "' can not be found.");
-            }
-        }
-
-        if (table.tagName.toLowerCase() !== "table") {
-            throw new Error("The selected element is not a table.");
-        }
-
-        this.initialLayout = table.innerHTML;
-        this.initialSortable = this.options.sortable;
-
-        // Disable manual sorting if no header is present (#4)
-        if (!this.options.header) {
-            this.options.sortable = false;
-        }
-
-        if (table.tHead === null) {
-            if (!this.options.data ||
-                (this.options.data && !this.options.data.headings)
-            ) {
-                this.options.sortable = false;
-            }
-        }
-
-        if (table.tBodies.length && !table.tBodies[0].rows.length) {
-            if (this.options.data) {
-                if (!this.options.data.data) {
-                    throw new Error(
-                        "You seem to be using the data option, but you've not defined any rows."
-                    );
-                }
-            }
-        }
-
-        this.table = table;
-
-        this.init();
-    };
-
-    /**
-     * Add custom property or method to extend DataTable
-     * @param  {String} prop    - Method name or property
-     * @param  {Mixed} val      - Function or property value
-     * @return {Void}
-     */
-    DataTable.extend = function(prop, val) {
-        if (typeof val === "function") {
-            DataTable.prototype[prop] = val;
-        } else {
-            DataTable[prop] = val;
-        }
-    };
-
-    var proto = DataTable.prototype;
-
-    /**
-     * Initialize the instance
-     * @param  {Object} options
-     * @return {Void}
-     */
-    proto.init = function (options) {
-        if (this.initialized || classList.contains(this.table, "dataTable-table")) {
-            return false;
-        }
-
+    DataTable.prototype.init = function() {
         var that = this;
-
-        this.options = extend(this.options, options || {});
 
         // IE detection
         this.isIE = !!/(msie|trident)/i.test(navigator.userAgent);
 
         this.currentPage = 1;
-        this.onFirstPage = true;
 
-        this.hiddenColumns = [];
-        this.columnRenderers = [];
-        this.selectedColumns = [];
+        this.rows().paginate();
+        this.totalPages = this.pages.length;
 
         this.render();
 
-        setTimeout(function () {
-            that.emit("datatable.init");
-            that.initialized = true;
-
-            if (that.options.plugins) {
-                each(that.options.plugins, function(options, plugin) {
-                    if (that[plugin] && typeof that[plugin] === "function") {
-                        that[plugin] = that[plugin](options, {
-                            each: each,
-                            extend: extend,
-                            classList: classList,
-                            createElement: createElement
-                        });
-
-                        // Init plugin
-                        if (options.enabled && that[plugin].init && typeof that[plugin].init === "function") {
-                            that[plugin].init();
-                        }
-                    }
-                });
-            }
-        }, 10);
-    };
-
-    /**
-     * Render the instance
-     * @param  {String} type
-     * @return {Void}
-     */
-    proto.render = function (type) {
-        if (type) {
-            switch (type) {
-            case "page":
-                this.renderPage();
-                break;
-            case "pager":
-                this.renderPager();
-                break;
-            case "header":
-                this.renderHeader();
-                break;
-            }
-
-            return false;
-        }
-
-        var that = this,
-            o = that.options,
-            template = "";
-
-        // Convert data to HTML
-        if (o.data) {
-            dataToTable.call(that);
-        }
-
-        if (o.ajax) {
-            var ajax = o.ajax;
-            var xhr = new XMLHttpRequest();
-
-            var xhrProgress = function (e) {
-                that.emit("datatable.ajax.progress", e, xhr);
-            };
-
-            var xhrLoad = function (e) {
-                if (xhr.readyState === 4) {
-                    that.emit("datatable.ajax.loaded", e, xhr);
-
-                    if (xhr.status === 200) {
-                        var obj = {};
-                        obj.data = ajax.load ? ajax.load.call(that, xhr) : xhr.responseText;
-
-                        obj.type = "json";
-
-                        if (ajax.content && ajax.content.type) {
-                            obj.type = ajax.content.type;
-
-                            obj = extend(obj, ajax.content);
-                        }
-
-                        that.import(obj);
-
-                        that.setColumns(true);
-
-                        that.emit("datatable.ajax.success", e, xhr);
-                    } else {
-                        that.emit("datatable.ajax.error", e, xhr);
-                    }
-                }
-            };
-
-            var xhrFailed = function (e) {
-                that.emit("datatable.ajax.error", e, xhr);
-            };
-
-            var xhrCancelled = function (e) {
-                that.emit("datatable.ajax.abort", e, xhr);
-            };
-
-            on(xhr, "progress", xhrProgress);
-            on(xhr, "load", xhrLoad);
-            on(xhr, "error", xhrFailed);
-            on(xhr, "abort", xhrCancelled);
-
-            that.emit("datatable.ajax.loading", xhr);
-
-            xhr.open("GET", typeof ajax === "string" ? o.ajax : o.ajax.url);
-            xhr.send();
-        }
-
-        // Store references
-        that.body = that.table.tBodies[0];
-        that.head = that.table.tHead;
-        that.foot = that.table.tFoot;
-
-        if (!that.body) {
-            that.body = createElement("tbody");
-
-            that.table.appendChild(that.body);
-        }
-
-        that.hasRows = that.body.rows.length > 0;
-
-        // Make a tHead if there isn't one (fixes #8)
-        if (!that.head) {
-            var h = createElement("thead");
-            var t = createElement("tr");
-
-            if (that.hasRows) {
-                each(that.body.rows[0].cells, function () {
-                    t.appendChild(createElement("th"));
-                });
-
-                h.appendChild(t);
-            }
-
-            that.head = h;
-
-            that.table.insertBefore(that.head, that.body);
-
-            that.hiddenHeader = !o.ajax;
-        }
-
-        that.headings = [];
-        that.hasHeadings = that.head.rows.length > 0;
-
-        if (that.hasHeadings) {
-            that.header = that.head.rows[0];
-            that.headings = [].slice.call(that.header.cells);
-        }
-
-        // Header
-        if (!o.header) {
-            if (that.head) {
-                that.table.removeChild(that.table.tHead);
-            }
-        }
-
-        // Footer
-        if (o.footer) {
-            if (that.head && !that.foot) {
-                that.foot = createElement("tfoot", {
-                    html: that.head.innerHTML
-                });
-                that.table.appendChild(that.foot);
-            }
-        } else {
-            if (that.foot) {
-                that.table.removeChild(that.table.tFoot);
-            }
-        }
-
-        // Build
-        that.wrapper = createElement("div", {
-            class: "dataTable-wrapper dataTable-loading"
-        });
-
-        // Template for custom layouts
-        template += "<div class='dataTable-top'>";
-        template += o.layout.top;
-        template += "</div>";
-        template += "<div class='dataTable-container'></div>";
-        template += "<div class='dataTable-bottom'>";
-        template += o.layout.bottom;
-        template += "</div>";
-
-        // Info placement
-        template = template.replace("{info}", "<div class='dataTable-info'></div>");
-
-        // Per Page Select
-        if (o.perPageSelect) {
-            var wrap = "<div class='dataTable-dropdown'><label>";
-            wrap += o.labels.perPage;
-            wrap += "</label></div>";
-
-            // Create the select
-            var select = createElement("select", {
-                class: "dataTable-selector"
-            });
-
-            // Create the options
-            each(o.perPageSelect, function (val) {
-                var selected = val === o.perPage;
-                var option = new Option(val, val, selected, selected);
-                select.add(option);
-            });
-
-            // Custom label
-            wrap = wrap.replace("{select}", select.outerHTML);
-
-            // Selector placement
-            template = template.replace("{select}", wrap);
-        } else {
-            template = template.replace("{select}", "");
-        }
-
-        // Searchable
-        if (o.searchable) {
-            var form =
-                "<div class='dataTable-search'><input class='dataTable-input' placeholder='" +
-                o.labels.placeholder +
-                "' type='text'></div>";
-
-            // Search input placement
-            template = template.replace("{search}", form);
-        } else {
-            template = template.replace("{search}", "");
-        }
-
-        if (that.hasHeadings) {
-            // Sortable
-            this.render("header");
-        }
-
-        // Add table class
-        classList.add(that.table, "dataTable-table");
-
-        // Paginator
-        var w = createElement("div", {
-            class: "dataTable-pagination"
-        });
-        var paginator = createElement("ul");
-        w.appendChild(paginator);
-
-        // Pager(s) placement
-        template = template.replace(/\{pager\}/g, w.outerHTML);
-
-        that.wrapper.innerHTML = template;
-
-        that.container = that.wrapper.querySelector(".dataTable-container");
-
-        that.pagers = that.wrapper.querySelectorAll(".dataTable-pagination");
-
-        that.label = that.wrapper.querySelector(".dataTable-info");
-
-        // Insert in to DOM tree
-        that.table.parentNode.replaceChild(that.wrapper, that.table);
-        that.container.appendChild(that.table);
-
-        // Store the table dimensions
-        that.rect = that.table.getBoundingClientRect();
-
-        // Convert rows to array for processing
-        that.data = [].slice.call(that.body.rows);
-        that.activeRows = that.data.slice();
-        that.activeHeadings = that.headings.slice();
-
-        // Update
-        that.update();
-
-        if (!o.ajax) {
-            that.setColumns();
-        }
-
-        // Fix height
-        this.fixHeight();
-
-        // Fix columns
-        that.fixColumns();
-
-        // Class names
-        if (!o.header) {
-            classList.add(that.wrapper, "no-header");
-        }
-
-        if (!o.footer) {
-            classList.add(that.wrapper, "no-footer");
-        }
-
-        if (o.sortable) {
-            classList.add(that.wrapper, "sortable");
-        }
-
-        if (o.searchable) {
-            classList.add(that.wrapper, "searchable");
-        }
-
-        if (o.fixedHeight) {
-            classList.add(that.wrapper, "fixed-height");
-        }
-
-        if (o.fixedColumns) {
-            classList.add(that.wrapper, "fixed-columns");
-        }
-
-        that.bindEvents();
-    };
-
-    /**
-     * Render the page
-     * @return {Void}
-     */
-    proto.renderPage = function () {
-        if (this.hasRows && this.totalPages) {
-            if (this.currentPage > this.totalPages) {
-                this.currentPage = 1;
-            }
-
-            // Use a fragment to limit touching the DOM
-            var index = this.currentPage - 1,
-                frag = doc.createDocumentFragment();
-
-            if (this.hasHeadings) {
-                flush(this.header, this.isIE);
-
-                each(this.activeHeadings, function (th) {
-                    this.header.appendChild(th);
-                }, this);
-            }
-
-            each(this.pages[index], function (row) {
-                frag.appendChild(this.rows().render(row));
-            }, this);
-
-            this.clear(frag);
-
-            this.onFirstPage = this.currentPage === 1;
-            this.onLastPage = this.currentPage === this.lastPage;
-        } else {
-            this.clear();
-        }
-
-        // Update the info
-        var current = 0,
-            f = 0,
-            t = 0,
-            items;
-
-        if (this.totalPages) {
-            current = this.currentPage - 1;
-            f = current * this.options.perPage;
-            t = f + this.pages[current].length;
-            f = f + 1;
-            items = !!this.searching ? this.searchData.length : this.data.length;
-        }
-
-        if (this.label && this.options.labels.info.length) {
-            // CUSTOM LABELS
-            var string = this.options.labels.info
-                .replace("{start}", f)
-                .replace("{end}", t)
-                .replace("{page}", this.currentPage)
-                .replace("{pages}", this.totalPages)
-                .replace("{rows}", items);
-
-            this.label.innerHTML = items ? string : "";
-        }
-
-        if (this.currentPage == 1) {
-            this.fixHeight();
-        }
-    };
-
-    /**
-     * Render the pager(s)
-     * @return {Void}
-     */
-    proto.renderPager = function () {
-        flush(this.pagers, this.isIE);
-
-        if (this.totalPages > 1) {
-            var c = "pager",
-                frag = doc.createDocumentFragment(),
-                prev = this.onFirstPage ? 1 : this.currentPage - 1,
-                next = this.onlastPage ? this.totalPages : this.currentPage + 1;
-
-            // first button
-            if (this.options.firstLast) {
-                frag.appendChild(button(c, 1, this.options.firstText));
-            }
-
-            // prev button
-            if (this.options.nextPrev) {
-                frag.appendChild(button(c, prev, this.options.prevText));
-            }
-
-            var pager = this.links;
-
-            // truncate the links
-            if (this.options.truncatePager) {
-                pager = truncate(
-                    this.links,
-                    this.currentPage,
-                    this.pages.length,
-                    this.options.pagerDelta,
-                    this.options.ellipsisText
-                );
-            }
-
-            // active page link
-            classList.add(this.links[this.currentPage - 1], "active");
-
-            // append the links
-            each(pager, function (p) {
-                classList.remove(p, "active");
-                frag.appendChild(p);
-            });
-
-            classList.add(this.links[this.currentPage - 1], "active");
-
-            // next button
-            if (this.options.nextPrev) {
-                frag.appendChild(button(c, next, this.options.nextText));
-            }
-
-            // first button
-            if (this.options.firstLast) {
-                frag.appendChild(button(c, this.totalPages, this.options.lastText));
-            }
-
-            // We may have more than one pager
-            each(this.pagers, function (pager) {
-                pager.appendChild(frag.cloneNode(true));
-            });
-        }
-    };
-
-    /**
-     * Render the header
-     * @return {Void}
-     */
-    proto.renderHeader = function () {
-        var that = this;
-
-        that.labels = [];
-
-        if (that.headings && that.headings.length) {
-            each(that.headings, function (th, i) {
-
-                that.labels[i] = th.textContent;
-
-                if (classList.contains(th.firstElementChild, "dataTable-sorter")) {
-                    th.innerHTML = th.firstElementChild.innerHTML;
-                }
-
-                th.sortable = th.getAttribute("data-sortable") !== "false";
-
-                th.originalCellIndex = i;
-                if (that.options.sortable && th.sortable) {
-                    var link = createElement("a", {
-                        href: "#",
-                        class: "dataTable-sorter",
-                        html: th.innerHTML
-                    });
-
-                    th.innerHTML = "";
-                    th.setAttribute("data-sortable", "");
-                    th.appendChild(link);
-                }
-            });
-        }
-
-        that.fixColumns();
-    };
-
-    /**
-     * Bind event listeners
-     * @return {[type]} [description]
-     */
-    proto.bindEvents = function () {
-        var that = this,
-            o = that.options;
-
-        // Per page selector
-        if (o.perPageSelect) {
-            var selector = that.wrapper.querySelector(".dataTable-selector");
-            if (selector) {
-                // Change per page
-                on(selector, "change", function (e) {
-                    o.perPage = parseInt(this.value, 10);
-                    that.update();
-
-                    that.fixHeight();
-
-                    that.emit("datatable.perpage", o.perPage);
-                });
-            }
-        }
-
-        // Search input
-        if (o.searchable) {
-            that.input = that.wrapper.querySelector(".dataTable-input");
-            if (that.input) {
-                on(that.input, "keyup", function (e) {
-                    that.search(this.value);
-                });
-            }
-        }
-
-        // Pager(s) / sorting
-        on(that.wrapper, "click", function (e) {
-            var t = e.target;
-            if (t.nodeName.toLowerCase() === "a") {
-                if (t.hasAttribute("data-page")) {
-                    that.page(t.getAttribute("data-page"));
-                    e.preventDefault();
-                } else if (
-                    o.sortable &&
-                    classList.contains(t, "dataTable-sorter") &&
-                    t.parentNode.getAttribute("data-sortable") != "false"
-                ) {
-                    that.columns().sort(that.activeHeadings.indexOf(t.parentNode) + 1);
-                    e.preventDefault();
-                }
-            }
-        });
-    };
-
-    /**
-     * Set up columns
-     * @return {[type]} [description]
-     */
-    proto.setColumns = function (ajax) {
-
-        var that = this;
-
-        if (!ajax) {
-            each(that.data, function (row) {
-                each(row.cells, function (cell) {
-                    cell.data = cell.innerHTML;
-                });
-            });
+        if (this.config.fixedColumns) {
+            this.columns().fix();
         }
 
         // Check for the columns option
-        if (that.options.columns && that.headings.length) {
+        if (that.config.columns) {
+            that.selectedColumns = [];
+            that.columnRenderers = [];
 
-            each(that.options.columns, function (data) {
-
+            each(that.config.columns, function(data) {
                 // convert single column selection to array
                 if (!isArray(data.select)) {
                     data.select = [data.select];
@@ -1602,204 +1121,224 @@
                 }
 
                 // Add the data attributes to the th elements
-                each(data.select, function (column) {
-                    var th = that.headings[column];
-                    if (data.type) {
-                        th.setAttribute("data-type", data.type);
-                    }
-                    if (data.format) {
-                        th.setAttribute("data-format", data.format);
-                    }
-                    if (data.hasOwnProperty("sortable")) {
-                        th.setAttribute("data-sortable", data.sortable);
-                    }
-
-                    if (data.hasOwnProperty("hidden")) {
-                        if (data.hidden !== false) {
-                            that.columns().hide(column);
+                if (that.table.hasHeader) {
+                    each(data.select, function(column) {
+                        var th = that.table.header.cells[column].node;
+                        if (data.type) {
+                            th.setAttribute("data-type", data.type);
                         }
-                    }
+                        if (data.format) {
+                            th.setAttribute("data-format", data.format);
+                        }
+                        if (data.hasOwnProperty("sortable")) {
+                            th.setAttribute("data-sortable", data.sortable);
+                        }
 
-                    if (data.hasOwnProperty("sort") && data.select.length === 1) {
-                        that.columns().sort(data.select[0] + 1, data.sort, true);
-                    }
-                });
-            });
-        }
+                        if (data.hasOwnProperty("hidden")) {
+                            if (data.hidden !== false) {
+                                that.columns().hide(column);
+                            }
+                        }
 
-        if (that.hasRows) {
-            each(that.data, function (row, i) {
-                row.dataIndex = i;
-                each(row.cells, function (cell) {
-                    cell.data = cell.innerHTML;
-                });
+                        if (data.hasOwnProperty("sort") && data.select.length === 1) {
+                            that.columns().sort(data.select[0], data.sort);
+                        }
+                    });
+                }
             });
 
             if (that.selectedColumns.length) {
-                each(that.data, function (row) {
-                    each(row.cells, function (cell, i) {
-                        if (that.selectedColumns.indexOf(i) > -1) {
-                            each(that.columnRenderers, function (o) {
-                                if (o.columns.indexOf(i) > -1) {
-                                    cell.innerHTML = o.renderer.call(that, cell.data, cell, row);
+                each(that.table.rows, function(row) {
+                    each(row.cells, function(cell) {
+                        if (that.selectedColumns.indexOf(cell.index) > -1) {
+                            each(that.columnRenderers, function(o) {
+                                if (o.columns.indexOf(cell.index) > -1) {
+                                    cell.setContent(o.renderer.call(that, cell.content, cell, row));
                                 }
                             });
                         }
                     });
                 });
             }
-
-            that.columns().rebuild();
         }
 
-        that.render("header");
+        this.rows().render();
+
+        this.bindEvents();
     };
 
-    /**
-     * Destroy the instance
-     * @return {void}
-     */
-    proto.destroy = function () {
-        this.table.innerHTML = this.initialLayout;
+    DataTable.prototype.bindEvents = function() {
+        var that = this,
+            o = that.config;
 
-        // Remove the className
-        classList.remove(this.table, "dataTable-table");
+        this.wrapper.addEventListener("click", function(e) {
+            var node = e.target;
 
-        // Remove the containers
-        this.wrapper.parentNode.replaceChild(this.table, this.wrapper);
+            if (node.hasAttribute("data-page")) {
+                e.preventDefault();
+                that.page(parseInt(node.getAttribute("data-page"), 10));
+            }
 
-        this.initialized = false;
-    };
+            if (o.sortable && node.nodeName === "TH") {
+                if (
+                    node.hasAttribute("data-sortable") &&
+                    node.getAttribute("data-sortable") === "false"
+                )
+                    return false;
+                e.preventDefault();
+                that
+                    .columns()
+                    .sort(node.dataIndex, classList.contains(node, "asc") ? "desc" : "asc");
+            }
+        });
 
-    /**
-     * Update the instance
-     * @return {Void}
-     */
-    proto.update = function () {
-        this.paginate(this);
-        this.render("page");
+        if (o.perPageSelect) {
+            this.wrapper.addEventListener("change", function(e) {
+                if (
+                    e.target.nodeName === "SELECT" &&
+                    classList.contains(e.target, o.classes.selector)
+                ) {
+                    e.preventDefault();
+                    that.config.perPage = parseInt(e.target.value, 10);
 
-        this.links = [];
-
-        var i = this.pages.length;
-        while (i--) {
-            var num = i + 1;
-            this.links[i] = button(i === 0 ? "active" : "", num, num);
+                    that.rows().paginate();
+                    that.rows().render();
+                }
+            });
         }
 
-        this.sorting = false;
-
-        this.render("pager");
-
-        this.rows().update();
-
-        this.emit("datatable.update");
-    };
-
-    /**
-     * Sort rows into pages
-     * @return {Number}
-     */
-    proto.paginate = function () {
-        var perPage = this.options.perPage,
-            rows = this.activeRows;
-
-        if (this.searching) {
-            rows = [];
-
-            each(this.searchData, function (index) {
-                rows.push(this.activeRows[index]);
-            }, this);
+        if (o.searchable) {
+            this.wrapper.addEventListener("keyup", function(e) {
+                if (
+                    e.target.nodeName === "INPUT" &&
+                    classList.contains(e.target, o.classes.input)
+                ) {
+                    e.preventDefault();
+                    that.search(e.target.value);
+                }
+            });
         }
 
-        // Check for hidden columns
-        this.pages = rows
-            .map(function (tr, i) {
-                return i % perPage === 0 ? rows.slice(i, i + perPage) : null;
-            })
-            .filter(function (page) {
-                return page;
+        if (o.sortable) {
+            this.wrapper.addEventListener("mousedown", function(e) {
+                if (e.target.nodeName === "TH") {
+                    e.preventDefault();
+                }
+            });
+        }
+    };
+
+    DataTable.prototype.render = function() {
+        var that = this,
+            o = that.config;
+
+        if (o.fixedColumns) {
+            this.columnWidths = this.table.header.cells.map(function(cell) {
+                return cell.node.offsetWidth;
+            });
+        }
+
+        // Build
+        that.wrapper = createElement("div", {
+            class: o.classes.wrapper
+        });
+
+        // Template for custom layouts
+        var inner = [
+            "<div class='", o.classes.top, "'>", o.layout.top, "</div>",
+            "<div class='", o.classes.container, "'></div>",
+            "<div class='", o.classes.bottom, "'>", o.layout.bottom, "</div>"
+        ].join("");
+
+        // Info placement
+        inner = inner.replace(
+            "{info}",
+            "<div class='" + o.classes.info + "'></div>"
+        );
+
+        // Per Page Select
+        if (o.perPageSelect) {
+            var wrap = [
+                "<div class='", o.classes.dropdown, "'>",
+                "<label>", o.labels.perPage, "</label>",
+                "</div>"
+            ].join("");
+
+            // Create the select
+            var select = createElement("select", {
+                class: o.classes.selector
             });
 
-        this.totalPages = this.lastPage = this.pages.length;
+            // Create the options
+            each(o.perPageSelect, function(val) {
+                var selected = val === o.perPage;
+                var option = new Option(val, val, selected, selected);
+                select.add(option);
+            });
 
-        return this.totalPages;
+            // Custom label
+            wrap = wrap.replace("{select}", select.outerHTML);
+
+            // Selector placement
+            inner = inner.replace("{select}", wrap);
+        } else {
+            inner = inner.replace("{select}", "");
+        }
+
+        // Searchable
+        if (o.searchable) {
+            var form = [
+                "<div class='", o.classes.search, "'>",
+                "<input class='", o.classes.input, "' placeholder='", o.labels.placeholder, "' type='text'>",
+                "</div>"
+            ].join("");
+
+            // Search input placement
+            inner = inner.replace("{search}", form);
+        } else {
+            inner = inner.replace("{search}", "");
+        }
+
+        // Add table class
+        that.table.node.classList.add(o.classes.table);
+
+        // Pagers
+        each(inner.match(/\{pager\}/g), function(pager, i) {
+            inner = inner.replace(
+                "{pager}",
+                createElement("div", {
+                    class: o.classes.pagination
+                }).outerHTML
+            );
+        });
+
+        that.wrapper.innerHTML = inner;
+
+        that.pagers = [].slice.call(
+            that.wrapper.querySelectorAll("." + o.classes.pagination)
+        );
+
+        each(that.pagers, function(pager, i) {
+            that.pagers[i] = new Pager(that, pager);
+        });
+
+        that.container = that.wrapper.querySelector("." + o.classes.container);
+
+        that.label = that.wrapper.querySelector("." + o.classes.info);
+
+        // Insert in to DOM tree
+        that.table.node.parentNode.replaceChild(that.wrapper, that.table.node);
+        that.container.appendChild(that.table.node);
+
+        // Store the table dimensions
+        that.rect = that.table.node.getBoundingClientRect();
     };
 
-    /**
-     * Fix column widths
-     * @return {Void}
-     */
-    proto.fixColumns = function () {
+    DataTable.prototype.update = function() {
+        this.rows().paginate();
+        this.rows().render();
 
-        if (this.options.fixedColumns && this.activeHeadings && this.activeHeadings.length) {
-
-            var cells,
-                hd = false;
-
-            this.columnWidths = [];
-
-            // If we have headings we need only set the widths on them
-            // otherwise we need a temp header and the widths need applying to all cells
-            if (this.table.tHead) {
-                // Reset widths
-                each(this.activeHeadings, function (cell) {
-                    cell.style.width = "";
-                }, this);
-
-                each(this.activeHeadings, function (cell, i) {
-                    var ow = cell.offsetWidth;
-                    var w = ow / this.rect.width * 100;
-                    cell.style.width = w + "%";
-                    this.columnWidths[i] = ow;
-                }, this);
-            } else {
-                cells = [];
-
-                // Make temperary headings
-                hd = createElement("thead");
-                var r = createElement("tr");
-                var c = this.table.tBodies[0].rows[0].cells;
-                each(c, function () {
-                    var th = createElement("th");
-                    r.appendChild(th);
-                    cells.push(th);
-                });
-
-                hd.appendChild(r);
-                this.table.insertBefore(hd, this.body);
-
-                var widths = [];
-                each(cells, function (cell, i) {
-                    var ow = cell.offsetWidth;
-                    var w = ow / this.rect.width * 100;
-                    widths.push(w);
-                    this.columnWidths[i] = ow;
-                }, this);
-
-                each(this.data, function (row) {
-                    each(row.cells, function (cell, i) {
-                        if (this.columns(cell.cellIndex).visible())
-                            cell.style.width = widths[i] + "%";
-                    }, this);
-                }, this);
-
-                // Discard the temp header
-                this.table.removeChild(hd);
-            }
-        }
-    };
-
-    /**
-     * Fix the container height;
-     * @return {Void}
-     */
-    proto.fixHeight = function () {
-        if (this.options.fixedHeight) {
-            this.container.style.height = null;
-            this.rect = this.container.getBoundingClientRect();
-            this.container.style.height = this.rect.height + "px";
-        }
+        this.emit("datatable.update");
     };
 
     /**
@@ -1807,40 +1346,36 @@
      * @param  {string} query
      * @return {void}
      */
-    proto.search = function (query) {
-        if (!this.hasRows) return false;
-
+    DataTable.prototype.search = function(query) {
         var that = this;
 
         query = query.toLowerCase();
 
-        this.currentPage = 1;
-        this.searching = true;
-        this.searchData = [];
+        that.currentPage = 1;
+        that.searching = true;
+        that.searchData = [];
 
         if (!query.length) {
-            this.searching = false;
-            this.update();
-            this.emit("datatable.search", query, this.searchData);
-            classList.remove(this.wrapper, "search-results");
+            that.searching = false;
+            classList.remove(that.wrapper, "search-results");
+            that.update();
+
             return false;
         }
 
-        this.clear();
-
-        each(this.data, function (row, idx) {
-            var inArray = this.searchData.indexOf(row) > -1;
+        each(that.table.rows, function(row, idx) {
+            var inArray = that.searchData.indexOf(row) > -1;
 
             // https://github.com/Mobius1/Vanilla-DataTables/issues/12
-            var doesQueryMatch = query.split(" ").reduce(function (bool, word) {
+            var match = query.split(" ").reduce(function(bool, word) {
                 var includes = false;
 
                 for (var x = 0; x < row.cells.length; x++) {
-                    if (
-                        row.cells[x].textContent.toLowerCase().indexOf(word) > -1 &&
-                        that.columns(row.cells[x].cellIndex).visible()
-                    ) {
-                        includes = true;
+                    if (row.cells[x].content.toLowerCase().indexOf(word) > -1) {
+                        if (!row.cells[x].hidden ||
+                            (row.cells[x].hidden && that.config.search.includeHiddenColumns)
+                        )
+                            includes = true;
                         break;
                     }
                 }
@@ -1848,20 +1383,17 @@
                 return bool && includes;
             }, true);
 
-            if (doesQueryMatch && !inArray) {
-                row.searchIndex = idx;
-                this.searchData.push(idx);
-            } else {
-                row.searchIndex = null;
+            if (match && !inArray) {
+                that.searchData.push(row);
             }
-        }, this);
+        });
 
-        classList.add(this.wrapper, "search-results");
+        classList.add(that.wrapper, "search-results");
 
         if (!that.searchData.length) {
             classList.remove(that.wrapper, "search-results");
 
-            that.setMessage(that.options.labels.noRows);
+            that.setMessage(that.config.labels.noRows);
         } else {
             that.update();
         }
@@ -1874,7 +1406,7 @@
      * @param  {int} page
      * @return {void}
      */
-    proto.page = function (page) {
+    DataTable.prototype.page = function(page) {
         // We don't want to load the current page again.
         if (page == this.currentPage) {
             return false;
@@ -1888,492 +1420,45 @@
             return false;
         }
 
-        this.render("page");
-        this.render("pager");
+        this.rows().render(page);
 
         this.emit("datatable.page", page);
-    };
-
-    /**
-     * Sort by column
-     * @param  {int} column - The column no.
-     * @param  {string} direction - asc or desc
-     * @return {void}
-     */
-    proto.sortColumn = function (column, direction) {
-        // Use columns API until sortColumn method is removed
-        this.columns().sort(column, direction);
-    };
-
-    /**
-     * Add new row data
-     * @param {object} data
-     */
-    proto.insert = function (data) {
-
-        var that = this,
-            rows = [];
-        if (isObject(data)) {
-            if (data.headings) {
-                if (!that.hasHeadings && !that.hasRows) {
-                    var tr = createElement("tr"),
-                        th;
-                    each(data.headings, function (heading) {
-                        th = createElement("th", {
-                            html: heading
-                        });
-
-                        tr.appendChild(th);
-                    });
-                    that.head.appendChild(tr);
-
-                    that.header = tr;
-                    that.headings = [].slice.call(tr.cells);
-                    that.hasHeadings = true;
-
-                    // Re-enable sorting if it was disabled due
-                    // to missing header
-                    that.options.sortable = that.initialSortable;
-
-                    // Allow sorting on new header
-                    that.render("header");
-                }
-            }
-
-            if (data.data && isArray(data.data)) {
-                rows = data.data;
-            }
-        } else if (isArray(data)) {
-            each(data, function (row) {
-                var r = [];
-                each(row, function (cell, heading) {
-
-                    var index = that.labels.indexOf(heading);
-
-                    if (index > -1) {
-                        r[index] = cell;
-                    }
-                });
-                rows.push(r);
-            });
-        }
-
-        if (rows.length) {
-            that.rows().add(rows);
-
-            that.hasRows = true;
-        }
-
-        that.update();
-
-        that.fixColumns();
-    };
-
-    /**
-     * Refresh the instance
-     * @return {void}
-     */
-    proto.refresh = function () {
-        if (this.options.searchable) {
-            this.input.value = "";
-            this.searching = false;
-        }
-        this.currentPage = 1;
-        this.onFirstPage = true;
-        this.update();
-
-        this.emit("datatable.refresh");
-    };
-
-    /**
-     * Truncate the table
-     * @param  {mixes} html - HTML string or HTMLElement
-     * @return {void}
-     */
-    proto.clear = function (html) {
-        if (this.body) {
-            flush(this.body, this.isIE);
-        }
-
-        var parent = this.body;
-        if (!this.body) {
-            parent = this.table;
-        }
-
-        if (html) {
-            if (typeof html === "string") {
-                var frag = doc.createDocumentFragment();
-                frag.innerHTML = html;
-            }
-
-            parent.appendChild(html);
-        }
-    };
-
-    /**
-     * Export table to various formats (csv, txt or sql)
-     * @param  {Object} options User options
-     * @return {Boolean}
-     */
-    proto.export = function (options) {
-        if (!this.hasHeadings && !this.hasRows) return false;
-
-        var headers = this.activeHeadings,
-            rows = [],
-            arr = [],
-            i,
-            x,
-            str,
-            link;
-
-        var defaults = {
-            download: true,
-            skipColumn: [],
-
-            // csv
-            lineDelimiter: "\n",
-            columnDelimiter: ",",
-
-            // sql
-            tableName: "myTable",
-
-            // json
-            replacer: null,
-            space: 4
-        };
-
-        // Check for the options object
-        if (!isObject(options)) {
-            return false;
-        }
-
-        var o = extend(defaults, options);
-
-        if (o.type) {
-            if (o.type === "txt" || o.type === "csv") {
-                // Include headings
-                rows[0] = this.header;
-            }
-
-            // Selection or whole table
-            if (o.selection) {
-                // Page number
-                if (!isNaN(o.selection)) {
-                    rows = rows.concat(this.pages[o.selection - 1]);
-                } else if (isArray(o.selection)) {
-                    // Array of page numbers
-                    for (i = 0; i < o.selection.length; i++) {
-                        rows = rows.concat(this.pages[o.selection[i] - 1]);
-                    }
-                }
-            } else {
-                rows = rows.concat(this.activeRows);
-            }
-
-            // Only proceed if we have data
-            if (rows.length) {
-                if (o.type === "txt" || o.type === "csv") {
-                    str = "";
-
-                    for (i = 0; i < rows.length; i++) {
-                        for (x = 0; x < rows[i].cells.length; x++) {
-                            // Check for column skip and visibility
-                            if (
-                                o.skipColumn.indexOf(headers[x].originalCellIndex) < 0 &&
-                                this.columns(headers[x].originalCellIndex).visible()
-                            ) {
-                                str += rows[i].cells[x].textContent + o.columnDelimiter;
-                            }
-                        }
-                        // Remove trailing column delimiter
-                        str = str.trim().substring(0, str.length - 1);
-
-                        // Apply line delimiter
-                        str += o.lineDelimiter;
-                    }
-
-                    // Remove trailing line delimiter
-                    str = str.trim().substring(0, str.length - 1);
-
-                    if (o.download) {
-                        str = "data:text/csv;charset=utf-8," + str;
-                    }
-                } else if (o.type === "sql") {
-                    // Begin INSERT statement
-                    str = "INSERT INTO `" + o.tableName + "` (";
-
-                    // Convert table headings to column names
-                    for (i = 0; i < headers.length; i++) {
-                        // Check for column skip and column visibility
-                        if (
-                            o.skipColumn.indexOf(headers[i].originalCellIndex) < 0 &&
-                            this.columns(headers[i].originalCellIndex).visible()
-                        ) {
-                            str += "`" + headers[i].textContent + "`,";
-                        }
-                    }
-
-                    // Remove trailing comma
-                    str = str.trim().substring(0, str.length - 1);
-
-                    // Begin VALUES
-                    str += ") VALUES ";
-
-                    // Iterate rows and convert cell data to column values
-                    for (i = 0; i < rows.length; i++) {
-                        str += "(";
-
-                        for (x = 0; x < rows[i].cells.length; x++) {
-                            // Check for column skip and column visibility
-                            if (
-                                o.skipColumn.indexOf(headers[x].originalCellIndex) < 0 &&
-                                this.columns(headers[x].originalCellIndex).visible()
-                            ) {
-                                str += '"' + rows[i].cells[x].textContent + '",';
-                            }
-                        }
-
-                        // Remove trailing comma
-                        str = str.trim().substring(0, str.length - 1);
-
-                        // end VALUES
-                        str += "),";
-                    }
-
-                    // Remove trailing comma
-                    str = str.trim().substring(0, str.length - 1);
-
-                    // Add trailing colon
-                    str += ";";
-
-                    if (o.download) {
-                        str = "data:application/sql;charset=utf-8," + str;
-                    }
-                } else if (o.type === "json") {
-                    // Iterate rows
-                    for (x = 0; x < rows.length; x++) {
-                        arr[x] = arr[x] || {};
-                        // Iterate columns
-                        for (i = 0; i < headers.length; i++) {
-                            // Check for column skip and column visibility
-                            if (
-                                o.skipColumn.indexOf(headers[i].originalCellIndex) < 0 &&
-                                this.columns(headers[i].originalCellIndex).visible()
-                            ) {
-                                arr[x][headers[i].textContent] = rows[x].cells[i].textContent;
-                            }
-                        }
-                    }
-
-                    // Convert the array of objects to JSON string
-                    str = JSON.stringify(arr, o.replacer, o.space);
-
-                    if (o.download) {
-                        str = "data:application/json;charset=utf-8," + str;
-                    }
-                }
-
-                // Download
-                if (o.download) {
-                    // Filename
-                    o.filename = o.filename || "datatable_export";
-                    o.filename += "." + o.type;
-
-                    str = encodeURI(str);
-
-                    // Create a link to trigger the download
-                    link = document.createElement("a");
-                    link.href = str;
-                    link.download = o.filename;
-
-                    // Append the link
-                    body.appendChild(link);
-
-                    // Trigger the download
-                    link.click();
-
-                    // Remove the link
-                    body.removeChild(link);
-                }
-
-                return str;
-            }
-        }
-
-        return false;
-    };
-
-    /**
-     * Import data to the table
-     * @param  {Object} options User options
-     * @return {Boolean}
-     */
-    proto.import = function (options) {
-        var obj = false;
-        var defaults = {
-            // csv
-            lineDelimiter: "\n",
-            columnDelimiter: ","
-        };
-
-        // Check for the options object
-        if (!isObject(options)) {
-            return false;
-        }
-
-        options = extend(defaults, options);
-
-        if (options.data.length || isObject(options.data)) {
-            // Import CSV
-            if (options.type === "csv") {
-                obj = {
-                    data: []
-                };
-
-                // Split the string into rows
-                var rows = options.data.split(options.lineDelimiter);
-
-                if (rows.length) {
-
-                    if (options.headings) {
-                        obj.headings = rows[0].split(options.columnDelimiter);
-
-                        rows.shift();
-                    }
-
-                    each(rows, function (row, i) {
-                        obj.data[i] = [];
-
-                        // Split the rows into values
-                        var values = row.split(options.columnDelimiter);
-
-                        if (values.length) {
-                            each(values, function (value) {
-                                obj.data[i].push(value);
-                            });
-                        }
-                    });
-                }
-            } else if (options.type === "json") {
-                var json = isJson(options.data);
-
-                // Valid JSON string
-                if (json) {
-                    obj = {
-                        headings: [],
-                        data: []
-                    };
-
-                    each(json, function (data, i) {
-                        obj.data[i] = [];
-                        each(data, function (value, column) {
-                            if (obj.headings.indexOf(column) < 0) {
-                                obj.headings.push(column);
-                            }
-
-                            obj.data[i].push(value);
-                        });
-                    });
-                } else {
-                    console.warn("That's not valid JSON!");
-                }
-            }
-
-            if (isObject(options.data)) {
-                obj = options.data;
-            }
-
-            if (obj) {
-                // Add the rows
-                this.insert(obj);
-            }
-        }
-
-        return false;
-    };
-    /**
-     * Print the table
-     * @return {void}
-     */
-    proto.print = function () {
-        var headings = this.activeHeadings;
-        var rows = this.activeRows;
-        var table = createElement("table");
-        var thead = createElement("thead");
-        var tbody = createElement("tbody");
-
-        var tr = createElement("tr");
-        each(headings, function (th) {
-            tr.appendChild(
-                createElement("th", {
-                    html: th.textContent
-                })
-            );
-        });
-
-        thead.appendChild(tr);
-
-        each(rows, function (row) {
-            var tr = createElement("tr");
-            each(row.cells, function (cell) {
-                tr.appendChild(
-                    createElement("td", {
-                        html: cell.textContent
-                    })
-                );
-            });
-            tbody.appendChild(tr);
-        });
-
-        table.appendChild(thead);
-        table.appendChild(tbody);
-
-        // Open new window
-        var w = win.open();
-
-        // Append the table to the body
-        w.document.body.appendChild(table);
-
-        // Print
-        w.print();
     };
 
     /**
      * Show a message in the table
      * @param {string} message
      */
-    proto.setMessage = function (message) {
+    DataTable.prototype.setMessage = function(message) {
         var colspan = 1;
 
-        if (this.hasRows) {
-            colspan = this.data[0].cells.length;
+        if (this.table.rows.length) {
+            colspan = this.table.rows[0].cells.length;
         }
 
-        this.clear(
-            createElement("tr", {
-                html: '<td class="dataTables-empty" colspan="' +
-                    colspan +
-                    '">' +
-                    message +
-                    "</td>"
-            })
-        );
+        var node = createElement("tr", {
+            html: '<td class="dataTables-empty" colspan="' +
+                colspan +
+                '">' +
+                message +
+                "</td>"
+        });
+
+        empty(this.table.body);
+
+        this.table.body.appendChild(node);
     };
 
-    /**
-     * Columns API access
-     * @return {Object} new Columns instance
-     */
-    proto.columns = function (columns) {
-        return new Columns(this, columns);
+    DataTable.prototype.columns = function() {
+        return new Columns(this);
     };
 
-    /**
-     * Rows API access
-     * @return {Object} new Rows instance
-     */
-    proto.rows = function (rows) {
-        return new Rows(this, rows);
+    DataTable.prototype.rows = function() {
+        return new Rows(this);
+    };
+
+    DataTable.prototype.exporter = function(config) {
+        return new Exporter(this);
     };
 
     /**
@@ -2382,7 +1467,7 @@
      * @param  {Function} callback
      * @return {Void}
      */
-    proto.on = function (event, callback) {
+    DataTable.prototype.on = function(event, callback) {
         this.events = this.events || {};
         this.events[event] = this.events[event] || [];
         this.events[event].push(callback);
@@ -2394,7 +1479,7 @@
      * @param  {Function} callback
      * @return {Void}
      */
-    proto.off = function (event, callback) {
+    DataTable.prototype.off = function(event, callback) {
         this.events = this.events || {};
         if (event in this.events === false) return;
         this.events[event].splice(this.events[event].indexOf(callback), 1);
@@ -2405,7 +1490,7 @@
      * @param  {String} event
      * @return {Void}
      */
-    proto.emit = function (event) {
+    DataTable.prototype.emit = function(event) {
         this.events = this.events || {};
         if (event in this.events === false) return;
         for (var i = 0; i < this.events[event].length; i++) {

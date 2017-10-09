@@ -4,11 +4,11 @@
  * Copyright (c) 2015-2017 Karl Saunders (http://mobius.ovh)
  * Licensed under MIT (http://www.opensource.org/licenses/mit-license.php)
  *
- * Version: 1.6.5
+ * Version: 2.0.0-alpha.4
  *
  */
 
-.dataTable-wrapper.no-header .dataTable-container {
+ .dataTable-wrapper.no-header .dataTable-container {
 	border-top: 1px solid #d9d9d9;
 }
 
@@ -127,16 +127,9 @@
 	text-align: left;
 }
 
-.dataTable-table th a {
-	text-decoration: none;
-	color: inherit;
-}
-
 .dataTable-sorter {
-	display: inline-block;
-	height: 100%;
 	position: relative;
-	width: 100%;
+	cursor: pointer;
 }
 
 .dataTable-sorter::before,
@@ -162,8 +155,8 @@
 	top: 8px;
 }
 
-.asc .dataTable-sorter::after,
-.desc .dataTable-sorter::before {
+.dataTable-sorter.asc::after,
+.dataTable-sorter.desc::before {
 	opacity: 0.6;
 }
 
