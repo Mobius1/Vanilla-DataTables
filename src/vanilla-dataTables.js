@@ -4,7 +4,7 @@
  * Copyright (c) 2015-2017 Karl Saunders (http://mobius.ovh)
  * Licensed under MIT (http://www.opensource.org/licenses/mit-license.php)
  *
- * Version: 2.0.0-alpha.7
+ * Version: 2.0.0-alpha.8
  *
  */
 (function(root, factory) {
@@ -633,6 +633,8 @@
         each(this.instance.pagers, function(pager) {
             pager.render();
         });
+
+        this.instance.getInfo();
     };
 
     Rows.prototype.paginate = function() {
@@ -1278,8 +1280,7 @@
                     e.preventDefault();
                     that.config.perPage = parseInt(e.target.value, 10);
 
-                    that.rows().paginate();
-                    that.rows().render();
+                    that.update();
                 }
             });
         }
@@ -1404,7 +1405,7 @@
 
         that.container = that.wrapper.querySelector("." + o.classes.container);
 
-        that.label = that.wrapper.querySelector("." + o.classes.info);
+        that.labels = that.wrapper.querySelectorAll("." + o.classes.info);
 
         // Insert in to DOM tree
         that.table.node.parentNode.replaceChild(that.wrapper, that.table.node);
@@ -1421,6 +1422,36 @@
         this.rows().render();
 
         this.emit("datatable.update");
+    };
+
+    DataTable.prototype.getInfo = function() {
+        // Update the info
+        var current = 0,
+            f = 0,
+            t = 0,
+            items;
+
+        if (this.totalPages) {
+            current = this.currentPage - 1;
+            f = current * this.config.perPage;
+            t = f + this.pages[current].length;
+            f = f + 1;
+            items = !!this.searching ? this.searchData.length : this.table.rows.length;
+        }
+
+        if (this.labels.length && this.config.labels.info.length) {
+            // CUSTOM LABELS
+            var string = this.config.labels.info
+                .replace("{start}", f)
+                .replace("{end}", t)
+                .replace("{page}", this.currentPage)
+                .replace("{pages}", this.totalPages)
+                .replace("{rows}", items);
+
+            each([].slice.call(this.labels), function(label) {
+                label.innerHTML = items ? string : "";
+            });
+        }
     };
 
     /**
