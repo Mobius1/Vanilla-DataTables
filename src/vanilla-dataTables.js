@@ -4,7 +4,7 @@
  * Copyright (c) 2015-2017 Karl Saunders (http://mobius.ovh)
  * Licensed under MIT (http://www.opensource.org/licenses/mit-license.php)
  *
- * Version: 2.0.0-alpha.8
+ * Version: 2.0.0-alpha.9
  *
  */
 (function(root, factory) {
@@ -181,7 +181,11 @@
                 if ("html" === e) {
                     d.innerHTML = b[e];
                 } else {
-                    d.setAttribute(e, b[e]);
+                    if (e in d) {
+                        d[e] = b[e]
+                    } else {
+                        d.setAttribute(e, b[e]);
+                    }
                 }
             }
         }
@@ -209,18 +213,12 @@
     };
 
     var empty = function(el, ie) {
-        if (el instanceof NodeList) {
-            each(el, function(e) {
-                empty(e, ie);
-            });
-        } else {
-            if (ie) {
-                while (el.hasChildNodes()) {
-                    el.removeChild(el.firstChild);
-                }
-            } else {
-                el.innerHTML = "";
+        if (ie) {
+            while (el.hasChildNodes()) {
+                el.removeChild(el.lastChild);
             }
+        } else {
+            el.innerHTML = "";
         }
     };
 
@@ -314,16 +312,8 @@
     var Cell = function(cell, index) {
         this.node = cell;
         this.content = cell.innerHTML;
-
         this.hidden = false;
-
         this.index = this.node.dataIndex = index;
-
-        if (this.node.nodeName === "TD") {
-            this.type = "cell";
-        } else if (this.node.nodeName === "TH") {
-            this.type = "heading";
-        }
     };
 
     Cell.prototype.setContent = function(content) {
@@ -386,7 +376,7 @@
 
                 this.rows.shift();
 
-                if (instance.config.searchable) {
+                if (instance.config.sortable) {
                     each(this.header.cells, function(cell) {
                         classList.add(cell.node, instance.config.classes.sorter);
                     });
@@ -497,18 +487,19 @@
     };
 
     Pager.prototype.render = function(pages) {
-        pages = pages || this.instance.totalPages;
+        var that = this,
+            dt = that.instance,
+            o = dt.config;
 
-        var o = this.instance.config;
+        pages = pages || dt.totalPages;
 
-        empty(this.parent, this.isIE);
+        empty(that.parent, that.isIE);
 
         if (pages > 1) {
-            var that = this,
-                c = "pager",
+            var c = "pager",
                 ul = createElement("ul"),
-                prev = this.instance.onFirstPage ? 1 : this.instance.currentPage - 1,
-                next = this.instance.onlastPage ? pages : this.instance.currentPage + 1;
+                prev = dt.onFirstPage ? 1 : dt.currentPage - 1,
+                next = dt.onlastPage ? pages : dt.currentPage + 1;
 
             // first button
             if (o.firstLast) {
@@ -536,7 +527,7 @@
                 ul.appendChild(button(c, pages, o.lastText));
             }
 
-            this.parent.appendChild(ul);
+            that.parent.appendChild(ul);
         }
     };
 
@@ -595,17 +586,19 @@
     };
 
     Rows.prototype.render = function(page) {
-        page = page || this.instance.currentPage;
+        var that = this,
+            dt = that.instance;
+        page = page || dt.currentPage;
 
-        empty(this.instance.table.body);
+        empty(dt.table.body);
 
-        if (page < 1 || page > this.instance.totalPages) return;
+        if (page < 1 || page > dt.totalPages) return;
 
         var that = this,
-            head = this.instance.table.header,
+            head = dt.table.header,
             fragment = document.createDocumentFragment();
 
-        if (this.instance.table.hasHeader) {
+        if (dt.table.hasHeader) {
             empty(head.node);
             each(head.cells, function(cell) {
                 if (!cell.hidden) {
@@ -614,8 +607,8 @@
             });
         }
 
-        if (this.instance.pages.length) {
-            each(this.instance.pages[page - 1], function(row) {
+        if (dt.pages.length) {
+            each(dt.pages[page - 1], function(row) {
                 empty(row.node);
 
                 each(row.cells, function(cell) {
@@ -628,13 +621,13 @@
             });
         }
 
-        this.instance.table.body.appendChild(fragment);
+        dt.table.body.appendChild(fragment);
 
-        each(this.instance.pagers, function(pager) {
+        each(dt.pagers, function(pager) {
             pager.render();
         });
 
-        this.instance.getInfo();
+        dt.getInfo();
     };
 
     Rows.prototype.paginate = function() {
@@ -678,19 +671,20 @@
     };
 
     Rows.prototype.remove = function(obj) {
-        var row = false;
+        var row = false,
+            dt = this.instance;
 
         if (isArray(obj)) {
             // reverse order or there'll be shit to pay
             for (var i = obj.length - 1; i >= 0; i--) {
-                this.instance.table.removeRow(this.get(obj[i]));
+                dt.table.removeRow(this.get(obj[i]));
             }
-            this.instance.table.update();
-            this.instance.update();
+            dt.table.update();
+            dt.update();
         } else {
             if (row = this.get(obj)) {
-                this.instance.table.removeRow(row, true);
-                this.instance.update();
+                dt.table.removeRow(row, true);
+                dt.update();
 
                 return row;
             }
@@ -719,11 +713,17 @@
     };
 
     Columns.prototype.sort = function(column, direction) {
-        column = column || 0;
-        direction = direction || "asc";
 
-        var dt = this.instance,
-            node = dt.table.header.cells[column].node,
+        var dt = this.instance;
+
+        column = column || 0;
+        direction = direction || (dt.lastDirection && "asc" === dt.lastDirection ? direction = "desc" : direction = "asc");
+
+        if (column < 0 || column > dt.table.header.cells.length - 1) {
+            return false;
+        }
+
+        var node = dt.table.header.cells[column].node,
             rows = dt.table.rows;
 
         if (dt.searching && dt.searchData) {
@@ -989,9 +989,9 @@
         });
 
         // Convert the array of objects to JSON string
-        str = JSON.stringify(data, this.config.replacer, this.config.space);
+        str = JSON.stringify(data, o.replacer, o.space);
 
-        if (this.config.download) {
+        if (o.download) {
             this.string = "data:application/json;charset=utf-8," + str;
             this.download();
         }
@@ -1244,6 +1244,11 @@
         this.bindEvents();
 
         this.initialised = true;
+
+        var that = this;
+        setTimeout(function() {
+            that.emit("datatable.init");
+        }, 10);
     };
 
     DataTable.prototype.bindEvents = function() {
