@@ -4,7 +4,7 @@
  * Copyright (c) 2015-2017 Karl Saunders (http://mobius.ovh)
  * Licensed under MIT (http://www.opensource.org/licenses/mit-license.php)
  *
- * Version: 2.0.0-alpha.5
+ * Version: 2.0.0-alpha.6
  *
  */
 (function(root, factory) {
@@ -372,16 +372,7 @@
                     });
                 }
             } else {
-                var th = createElement("thead");
-                var tr = createElement("tr");
-                each(this.rows[0].cells, function(cell) {
-                    tr.appendChild(createElement("td"));
-                });
-
-                th.appendChild(tr);
-
-                this.header = new Row(tr, 1);
-                this.hasHeader = true;
+                this.addHeader();
             }
         }
     };
@@ -432,21 +423,45 @@
         }
     };
 
-    Table.prototype.addRow = function(row, at) {
+    Table.prototype.addHeader = function() {
+        var th = createElement("thead"),
+            tr = createElement("tr");
+
+        each(this.rows[0].cells, function(cell) {
+            tr.appendChild(createElement("td"));
+        });
+
+        th.appendChild(tr);
+
+        this.header = new Row(tr, 1);
+        this.hasHeader = true;
+    };
+
+    Table.prototype.addRow = function(row, at, update) {
         if (row instanceof Row) {
             this.rows.splice(at || 0, 0, row);
 
-            this.update();
+            // We may have a table without a header
+            if (!this.hasHeader) {
+                this.addHeader();
+            }
+
+            if (update) {
+                this.update();
+            }
 
             return row;
         }
     };
 
-    Table.prototype.removeRow = function(row) {
+    Table.prototype.removeRow = function(row, update) {
         if (row instanceof Row) {
-            this.rows.splice(row.index, 1);
+            var index = this.rows.indexOf(row);
+            this.rows.splice(index, 1);
 
-            this.update();
+            if (update) {
+                this.update();
+            }
         }
     };
 
@@ -563,6 +578,8 @@
     Rows.prototype.render = function(page) {
         page = page || this.instance.currentPage;
 
+        empty(this.instance.table.body);
+
         if (page < 1 || page > this.instance.totalPages) return;
 
         var that = this,
@@ -578,19 +595,19 @@
             });
         }
 
-        each(this.instance.pages[page - 1], function(row) {
-            empty(row.node);
+        if (this.instance.pages.length) {
+            each(this.instance.pages[page - 1], function(row) {
+                empty(row.node);
 
-            each(row.cells, function(cell) {
-                if (!cell.hidden) {
-                    row.node.appendChild(cell.node);
-                }
+                each(row.cells, function(cell) {
+                    if (!cell.hidden) {
+                        row.node.appendChild(cell.node);
+                    }
+                });
+
+                fragment.append(row.node);
             });
-
-            fragment.append(row.node);
-        });
-
-        empty(this.instance.table.body);
+        }
 
         this.instance.table.body.appendChild(fragment);
 
@@ -623,19 +640,16 @@
         if (isArray(row)) {
             at = at || 0;
             if (isArray(row[0])) {
-                var rows = row;
-                row = [];
-                each(rows, function(tr) {
-                    tr = new Row(tr);
-                    this.instance.table.rows.splice(at || 0, 0, tr);
-                    row.push(tr);
+                each(row, function(tr) {
+                    tr = this.instance.table.addRow(new Row(tr, this.instance.table.rows.length + 1), at);
                 }, this);
+                // only update after adding multiple rows
+                // to keep performance hit to a minimum
+                this.instance.table.update();
             } else {
-                row = new Row(row);
-                this.instance.table.rows.splice(at || 0, 0, row);
+                row = this.instance.table.addRow(new Row(row, this.instance.table.rows.length + 1), at, true);
             }
 
-            this.instance.table.update();
             this.instance.update();
 
             return row;
@@ -643,23 +657,36 @@
     };
 
     Rows.prototype.remove = function(obj) {
-        var row = false,
-            rows = this.instance.table.rows;
+        var row = false;
 
-        if (obj instanceof Row || obj instanceof Element) {
+        if (isArray(obj)) {
+            // reverse order or there'll be shit to pay
+            for (var i = obj.length - 1; i >= 0; i--) {
+                this.instance.table.removeRow(this.get(obj[i]));
+            }
+            this.instance.table.update();
+            this.instance.update();
+        } else {
+            if (row = this.get(obj)) {
+                this.instance.table.removeRow(row, true);
+                this.instance.update();
+
+                return row;
+            }
+        }
+    };
+
+    Rows.prototype.get = function(row) {
+        var rows = this.instance.table.rows;
+        if (row instanceof Row || row instanceof Element) {
             for (var n = 0; n < rows.length; n++) {
-                if (rows[n].node === obj || rows[n] === obj) {
+                if (rows[n].node === row || rows[n] === row) {
                     row = rows[n];
                     break;
                 }
             }
         } else {
-            row = rows[obj];
-        }
-
-        if (row) {
-            this.instance.table.removeRow(row);
-            this.instance.update();
+            row = rows[row];
         }
 
         return row;
