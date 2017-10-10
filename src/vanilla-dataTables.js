@@ -4,7 +4,7 @@
  * Copyright (c) 2015-2017 Karl Saunders (http://mobius.ovh)
  * Licensed under MIT (http://www.opensource.org/licenses/mit-license.php)
  *
- * Version: 2.0.0-alpha.4
+ * Version: 2.0.0-alpha.5
  *
  */
 (function(root, factory) {
@@ -353,17 +353,35 @@
 
         this.body = this.node.tBodies[0];
 
-        if (this.rows[0].isHeader) {
-            this.hasHeader = true;
+        if (!this.body) {
+            this.body = createElement("tbody");
+            this.node.appendChild(this.body);
+        }
 
-            this.header = this.rows[0];
+        if (this.rows.length) {
+            if (this.rows[0].isHeader) {
+                this.hasHeader = true;
 
-            this.rows.shift();
+                this.header = this.rows[0];
 
-            if (instance.config.searchable) {
-                each(this.header.cells, function(cell) {
-                    classList.add(cell.node, instance.config.classes.sorter);
+                this.rows.shift();
+
+                if (instance.config.searchable) {
+                    each(this.header.cells, function(cell) {
+                        classList.add(cell.node, instance.config.classes.sorter);
+                    });
+                }
+            } else {
+                var th = createElement("thead");
+                var tr = createElement("tr");
+                each(this.rows[0].cells, function(cell) {
+                    tr.appendChild(createElement("td"));
                 });
+
+                th.appendChild(tr);
+
+                this.header = new Row(tr, 1);
+                this.hasHeader = true;
             }
         }
     };
@@ -551,12 +569,14 @@
             head = this.instance.table.header,
             fragment = document.createDocumentFragment();
 
-        empty(head.node);
-        each(head.cells, function(cell) {
-            if (!cell.hidden) {
-                head.node.appendChild(cell.node);
-            }
-        });
+        if (this.instance.table.hasHeader) {
+            empty(head.node);
+            each(head.cells, function(cell) {
+                if (!cell.hidden) {
+                    head.node.appendChild(cell.node);
+                }
+            });
+        }
 
         each(this.instance.pages[page - 1], function(row) {
             empty(row.node);
@@ -602,8 +622,20 @@
     Rows.prototype.add = function(row, at) {
         if (isArray(row)) {
             at = at || 0;
+            if (isArray(row[0])) {
+                var rows = row;
+                row = [];
+                each(rows, function(tr) {
+                    tr = new Row(tr);
+                    this.instance.table.rows.splice(at || 0, 0, tr);
+                    row.push(tr);
+                }, this);
+            } else {
+                row = new Row(row);
+                this.instance.table.rows.splice(at || 0, 0, row);
+            }
 
-            row = this.instance.table.addRow(new Row(row, this.instance.table.rows.length + 1), at);
+            this.instance.table.update();
             this.instance.update();
 
             return row;
@@ -678,11 +710,11 @@
             b = b.cells[column].content
 
             if (datetime) {
-                a = parseDate(format === "UNIX" ? parseInt(a, 10) : a, format);
-                b = parseDate(format === "UNIX" ? parseInt(b, 10) : b, format);
+                a = parseDate(parseInt(a, 10), format);
+                b = parseDate(parseInt(b, 10), format);
             } else {
                 a = a.replace(/(\$|\,|\s|%)/g, "");
-                a = b.replace(/(\$|\,|\s|%)/g, "");
+                b = b.replace(/(\$|\,|\s|%)/g, "");
             }
 
             return direction === "asc" ? a > b : a < b;
@@ -916,9 +948,7 @@
         str = JSON.stringify(data, this.config.replacer, this.config.space);
 
         if (this.config.download) {
-            str = "data:application/json;charset=utf-8," + str;
-
-            this.download(str);
+            this.download("data:application/json;charset=utf-8," + str);
         }
 
         return str;
@@ -956,8 +986,7 @@
         str = str.trim().substring(0, str.length - 1);
 
         if (o.download) {
-            str = "data:text/csv;charset=utf-8," + str;
-            this.download(str);
+            this.download("data:text/csv;charset=utf-8," + str);
         }
     };
 
@@ -1011,9 +1040,7 @@
         str += ";";
 
         if (o.download) {
-            str = "data:application/sql;charset=utf-8," + str;
-
-            this.download(str);
+            this.download("data:application/sql;charset=utf-8," + str);
         }
 
         return str;
@@ -1232,7 +1259,7 @@
         var that = this,
             o = that.config;
 
-        if (o.fixedColumns) {
+        if (this.table.hasHeader && o.fixedColumns) {
             this.columnWidths = this.table.header.cells.map(function(cell) {
                 return cell.node.offsetWidth;
             });
