@@ -4,7 +4,7 @@
  * Copyright (c) 2015-2017 Karl Saunders (http://mobius.ovh)
  * Licensed under MIT (http://www.opensource.org/licenses/mit-license.php)
  *
- * Version: 2.0.0-alpha.6
+ * Version: 2.0.0-alpha.7
  *
  */
 (function(root, factory) {
@@ -186,6 +186,26 @@
             }
         }
         return d;
+    };
+
+    /**
+     * Add event listener to target
+     * @param  {Object} el
+     * @param  {String} e
+     * @param  {Function} fn
+     */
+    var on = function(el, e, fn) {
+        el.addEventListener(e, fn, false);
+    };
+
+    /**
+     * Remove event listener from target
+     * @param  {Object} el
+     * @param  {String} e
+     * @param  {Function} fn
+     */
+    var off = function(el, e, fn) {
+        el.removeEventListener(e, fn);
     };
 
     var empty = function(el, ie) {
@@ -456,8 +476,7 @@
 
     Table.prototype.removeRow = function(row, update) {
         if (row instanceof Row) {
-            var index = this.rows.indexOf(row);
-            this.rows.splice(index, 1);
+            this.rows.splice(this.rows.indexOf(row), 1);
 
             if (update) {
                 this.update();
@@ -882,17 +901,10 @@
         this.config = config;
         this.request = new XMLHttpRequest();
 
-        this.events = {
-            load: this.load.bind(this),
-            error: this.error.bind(this),
-            abort: this.abort.bind(this),
-            progress: this.progress.bind(this)
-        };
-
-        this.request.addEventListener("load", this.events.load);
-        this.request.addEventListener("error", this.events.error);
-        this.request.addEventListener("abort", this.events.abort);
-        this.request.addEventListener("progress", this.events.progress);
+        on(this.request, "load", this.load.bind(this));
+        on(this.request, "error", this.error.bind(this));
+        on(this.request, "abort", this.abort.bind(this));
+        on(this.request, "progress", this.progress.bind(this));
     };
 
     Ajax.prototype.send = function() {
@@ -945,6 +957,9 @@
             case "sql":
                 this.toSQL();
                 break;
+            case "csv":
+                this.toCSV();
+                break;
         }
     };
 
@@ -975,7 +990,8 @@
         str = JSON.stringify(data, this.config.replacer, this.config.space);
 
         if (this.config.download) {
-            this.download("data:application/json;charset=utf-8," + str);
+            this.string = "data:application/json;charset=utf-8," + str;
+            this.download();
         }
 
         return str;
@@ -1013,7 +1029,8 @@
         str = str.trim().substring(0, str.length - 1);
 
         if (o.download) {
-            this.download("data:text/csv;charset=utf-8," + str);
+            this.string = "data:text/csv;charset=utf-8," + str;
+            this.download();
         }
     };
 
@@ -1067,7 +1084,8 @@
         str += ";";
 
         if (o.download) {
-            this.download("data:application/sql;charset=utf-8," + str);
+            this.string = "data:application/sql;charset=utf-8," + str;
+            this.download();
         }
 
         return str;
@@ -1076,16 +1094,16 @@
     Exporter.prototype.download = function(str) {
 
         // Download
-        if (str) {
+        if (this.string) {
             // Filename
             this.config.filename = this.config.filename || "datatable_export";
             this.config.filename += "." + this.config.type;
 
-            str = encodeURI(str);
+            this.string = encodeURI(this.string);
 
             // Create a link to trigger the download
             var link = createElement("a");
-            link.href = str;
+            link.href = this.string;
             link.download = this.config.filename;
 
             // Append the link
@@ -1138,6 +1156,9 @@
     };
 
     DataTable.prototype.init = function() {
+
+        if (this.initialised) return;
+
         var that = this;
 
         // IE detection
@@ -1219,13 +1240,15 @@
         this.rows().render();
 
         this.bindEvents();
+
+        this.initialised = true;
     };
 
     DataTable.prototype.bindEvents = function() {
         var that = this,
             o = that.config;
 
-        this.wrapper.addEventListener("click", function(e) {
+        on(this.wrapper, "click", function(e) {
             var node = e.target;
 
             if (node.hasAttribute("data-page")) {
@@ -1247,7 +1270,7 @@
         });
 
         if (o.perPageSelect) {
-            this.wrapper.addEventListener("change", function(e) {
+            on(this.wrapper, "change", function(e) {
                 if (
                     e.target.nodeName === "SELECT" &&
                     classList.contains(e.target, o.classes.selector)
@@ -1262,7 +1285,7 @@
         }
 
         if (o.searchable) {
-            this.wrapper.addEventListener("keyup", function(e) {
+            on(this.wrapper, "keyup", function(e) {
                 if (
                     e.target.nodeName === "INPUT" &&
                     classList.contains(e.target, o.classes.input)
@@ -1274,7 +1297,7 @@
         }
 
         if (o.sortable) {
-            this.wrapper.addEventListener("mousedown", function(e) {
+            on(this.wrapper, "mousedown", function(e) {
                 if (e.target.nodeName === "TH") {
                     e.preventDefault();
                 }
@@ -1283,6 +1306,9 @@
     };
 
     DataTable.prototype.render = function() {
+
+        if (this.rendered) return;
+
         var that = this,
             o = that.config;
 
@@ -1386,6 +1412,8 @@
 
         // Store the table dimensions
         that.rect = that.table.node.getBoundingClientRect();
+
+        that.rendered = true;
     };
 
     DataTable.prototype.update = function() {
@@ -1550,6 +1578,34 @@
         for (var i = 0; i < this.events[event].length; i++) {
             this.events[event][i].apply(this, Array.prototype.slice.call(arguments, 1));
         }
+    };
+
+    DataTable.prototype.destroy = function() {
+
+        var that = this,
+            o = that.config,
+            table = that.table;
+
+        classList.remove(table.node, o.classes.table);
+
+        each(table.header.cells, function(cell) {
+            cell.node.style.width = "";
+            classList.remove(cell.node, o.classes.sorter);
+        });
+
+        var frag = doc.createDocumentFragment();
+        empty(table.body);
+
+        each(table.rows, function(row) {
+            frag.appendChild(row.node);
+        });
+
+        table.body.appendChild(frag);
+
+        this.wrapper.parentNode.replaceChild(table.node, this.wrapper);
+
+        this.rendered = false;
+        this.initialised = false;
     };
 
     return DataTable;
