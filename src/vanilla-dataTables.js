@@ -4,7 +4,7 @@
  * Copyright (c) 2015-2017 Karl Saunders (http://mobius.ovh)
  * Licensed under MIT (http://www.opensource.org/licenses/mit-license.php)
  *
- * Version: 2.0.0-alpha.11
+ * Version: 2.0.0-alpha.12
  *
  */
 (function(root, factory) {
@@ -258,20 +258,6 @@
     };
 
     /**
-     * Create button helper
-     * @param  {String}   c
-     * @param  {Number}   p
-     * @param  {String}   t
-     * @return {Object}
-     */
-    var button = function(c, p, t) {
-        return createElement("li", {
-            class: c,
-            html: '<a href="#" data-page="' + p + '">' + t + "</a>"
-        });
-    };
-
-    /**
      * Use moment.js to parse cell contents for sorting
      * @param  {String} content     The datetime string to parse
      * @param  {String} format      The format for moment to use
@@ -503,15 +489,15 @@
 
             // first button
             if (o.firstLast) {
-                ul.appendChild(button(c, 1, o.firstText));
+                ul.appendChild(that.button(c, 1, o.firstText));
             }
 
             // prev button
             if (o.nextPrev) {
-                ul.appendChild(button(c, prev, o.prevText));
+                ul.appendChild(that.button(c, prev, o.prevText));
             }
 
-            var pager = this.truncate();
+            var pager = that.truncate();
             // append the links
             each(pager, function(btn) {
                 ul.appendChild(btn);
@@ -519,12 +505,12 @@
 
             // next button
             if (o.nextPrev) {
-                ul.appendChild(button(c, next, o.nextText));
+                ul.appendChild(that.button(c, next, o.nextText));
             }
 
             // first button
             if (o.firstLast) {
-                ul.appendChild(button(c, pages, o.lastText));
+                ul.appendChild(that.button(c, pages, o.lastText));
             }
 
             that.parent.appendChild(ul);
@@ -546,7 +532,7 @@
         // No need to truncate if it's disabled
         if (!o.truncatePager) {
             each(pages, function(index) {
-                pager.push(button(index == page ? "active" : "", index, index));
+                pager.push(that.button(index == page ? "active" : "", index, index));
             });
         } else {
             if (page < 4 - o.pagerDelta + delta) {
@@ -565,19 +551,26 @@
             each(range, function(index) {
                 if (n) {
                     if (index - n == 2) {
-                        pager.push(button("", n + 1, n + 1));
+                        pager.push(that.button("", n + 1, n + 1));
                     } else if (index - n != 1) {
                         // Create ellipsis node
-                        pager.push(button(o.classes.ellipsis, 0, o.ellipsisText));
+                        pager.push(that.button(o.classes.ellipsis, 0, o.ellipsisText, true));
                     }
                 }
 
-                pager.push(button(index == page ? "active" : "", index, index));
+                pager.push(that.button(index == page ? "active" : "", index, index));
                 n = index;
             });
         }
 
         return pager;
+    };
+
+    Pager.prototype.button = function(className, pageNum, content, ellipsis) {
+        return createElement("li", {
+            class: className,
+            html: !ellipsis ? '<a href="#" data-page="' + pageNum + '">' + content + "</a>" : '<span>' + content + "</span>"
+        });
     };
 
     // ROWS

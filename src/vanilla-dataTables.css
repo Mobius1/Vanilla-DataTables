@@ -4,7 +4,7 @@
  * Copyright (c) 2015-2017 Karl Saunders (http://mobius.ovh)
  * Licensed under MIT (http://www.opensource.org/licenses/mit-license.php)
  *
- * Version: 2.0.0-alpha.11
+ * Version: 2.0.0-alpha.12
  *
  */
 
@@ -54,14 +54,15 @@
 	float: left;
 }
 
-.dataTable-pagination a {
+.dataTable-pagination a,
+.dataTable-ellipsis span {
 	border: 1px solid transparent;
 	float: left;
 	margin-left: 2px;
 	padding: 6px 12px;
 	position: relative;
 	text-decoration: none;
-	color: #333;
+	color: inherit;
 }
 
 .dataTable-pagination a:hover {
@@ -75,10 +76,10 @@
 	cursor: default;
 }
 
-.dataTable-pagination .ellipsis a,
 .dataTable-pagination .disabled a,
 .dataTable-pagination .disabled a:focus,
-.dataTable-pagination .disabled a:hover {
+.dataTable-pagination .disabled a:hover,
+.dataTable-pagination .dataTable-ellipsis span {
 	cursor: not-allowed;
 }
 
