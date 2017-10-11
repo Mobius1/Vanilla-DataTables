@@ -4,7 +4,7 @@
  * Copyright (c) 2015-2017 Karl Saunders (http://mobius.ovh)
  * Licensed under MIT (http://www.opensource.org/licenses/mit-license.php)
  *
- * Version: 2.0.0-alpha.10
+ * Version: 2.0.0-alpha.11
  *
  */
 (function(root, factory) {
@@ -1372,6 +1372,99 @@
     };
 
     /**
+     * Import data to the table
+     * @param  {Object} options User options
+     * @return {Boolean}
+     */
+    DataTable.prototype.import = function(options) {
+        var that = this,
+            obj = false;
+        var defaults = {
+            // csv
+            lineDelimiter: "\n",
+            columnDelimiter: ","
+        };
+
+        // Check for the options object
+        if (!isObject(options)) {
+            return false;
+        }
+
+        options = extend(defaults, options);
+
+        if (options.data.length || isObject(options.data)) {
+            // Import CSV
+            if (options.type === "csv") {
+                obj = {
+                    data: []
+                };
+
+                // Split the string into rows
+                var rows = options.data.split(options.lineDelimiter);
+
+                if (rows.length) {
+
+                    if (options.headings) {
+                        obj.headings = rows[0].split(options.columnDelimiter);
+
+                        rows.shift();
+                    }
+
+                    each(rows, function(row, i) {
+                        obj.data[i] = [];
+
+                        // Split the rows into values
+                        var values = row.split(options.columnDelimiter);
+
+                        if (values.length) {
+                            each(values, function(value) {
+                                obj.data[i].push(value);
+                            });
+                        }
+                    });
+                }
+            } else if (options.type === "json") {
+                var json = isJson(options.data);
+
+                // Valid JSON string
+                if (json) {
+                    obj = {
+                        headings: [],
+                        data: []
+                    };
+
+                    each(json, function(data, i) {
+                        obj.data[i] = [];
+                        each(data, function(value, column) {
+                            if (obj.headings.indexOf(column) < 0) {
+                                obj.headings.push(column);
+                            }
+
+                            obj.data[i].push(value);
+                        });
+                    });
+                } else {
+                    console.warn("That's not valid JSON!");
+                }
+            }
+
+            if (isObject(options.data)) {
+                obj = options.data;
+            }
+
+            if (obj) {
+                each(obj.headings, function(heading, i) {
+                    that.table.header.cells[i].setContent(heading);
+                });
+
+                this.rows().add(obj.data);
+            }
+        }
+
+        return false;
+    };
+
+    /**
      * Show a message in the table
      * @param {string} message
      */
@@ -1401,10 +1494,6 @@
 
     DataTable.prototype.rows = function() {
         return new Rows(this);
-    };
-
-    DataTable.prototype.exporter = function(config) {
-        return new Exporter(this);
     };
 
     /**
