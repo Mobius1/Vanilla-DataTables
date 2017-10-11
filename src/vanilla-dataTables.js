@@ -4,7 +4,7 @@
  * Copyright (c) 2015-2017 Karl Saunders (http://mobius.ovh)
  * Licensed under MIT (http://www.opensource.org/licenses/mit-license.php)
  *
- * Version: 2.0.0-alpha.12
+ * Version: 2.0.0-alpha.13
  *
  */
 (function(root, factory) {
@@ -969,6 +969,8 @@
         this.isIE = !!/(msie|trident)/i.test(navigator.userAgent);
 
         this.currentPage = 1;
+        this.onFirstPage = true;
+        this.onLastPage = false;
 
         this.rows().paginate();
         this.totalPages = this.pages.length;
@@ -1355,7 +1357,10 @@
             this.currentPage = parseInt(page, 10);
         }
 
-        if (page > this.pages.length || page < 0) {
+        this.onFirstPage = this.currentPage === 1;
+        this.onLastPage = this.currentPage === this.totalPages;
+
+        if (page > this.totalPages || page < 0) {
             return false;
         }
 
