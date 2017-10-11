@@ -4,7 +4,7 @@
  * Copyright (c) 2015-2017 Karl Saunders (http://mobius.ovh)
  * Licensed under MIT (http://www.opensource.org/licenses/mit-license.php)
  *
- * Version: 2.0.0-alpha.9
+ * Version: 2.0.0-alpha.10
  *
  */
 (function(root, factory) {
@@ -928,197 +928,6 @@
     Ajax.prototype.abort = function() {};
     Ajax.prototype.progress = function() {};
 
-    var Exporter = function(instance) {
-        this.config = {
-            download: true,
-            skipColumns: [],
-
-            // csv
-            lineDelimiter: "\n",
-            columnDelimiter: ",",
-
-            // sql
-            tableName: "myTable",
-
-            // json
-            replacer: null,
-            space: 4
-        };
-
-        this.instance = instance;
-    };
-
-    Exporter.prototype.export = function(config) {
-        if (config && isObject(config)) {
-            this.config = extend(this.config, config);
-        }
-        switch (this.config.type.toLowerCase()) {
-            case "json":
-                this.toJSON();
-                break;
-            case "sql":
-                this.toSQL();
-                break;
-            case "csv":
-                this.toCSV();
-                break;
-        }
-    };
-
-    Exporter.prototype.toJSON = function(config) {
-
-        if (config && isObject(config)) {
-            this.config = extend(this.config, config);
-        }
-
-        this.config.type = "json";
-
-        var str = "",
-            data = [],
-            o = this.config,
-            table = this.instance.table;
-
-        each(table.rows, function(row, n) {
-            data[n] = data[n] || {};
-
-            each(row.cells, function(cell, i) {
-                if (!cell.hidden && o.skipColumns.indexOf(cell.index) < 0) {
-                    data[n][table.header.cells[cell.index].content] = table.rows[n].cells[cell.index].content;
-                }
-            })
-        });
-
-        // Convert the array of objects to JSON string
-        str = JSON.stringify(data, o.replacer, o.space);
-
-        if (o.download) {
-            this.string = "data:application/json;charset=utf-8," + str;
-            this.download();
-        }
-
-        return str;
-    };
-
-    Exporter.prototype.toCSV = function(config) {
-        if (config && isObject(config)) {
-            this.config = extend(this.config, config);
-        }
-
-        this.config.type = "csv";
-
-        var str = "",
-            data = [],
-            o = this.config,
-            table = this.instance.table;
-
-        each(table.rows, function(row, n) {
-            data[n] = data[n] || {};
-
-            each(row.cells, function(cell, i) {
-                if (!cell.hidden && o.skipColumns.indexOf(cell.index) < 0) {
-                    str += cell.content + o.columnDelimiter;
-                }
-            });
-
-            // Remove trailing column delimiter
-            str = str.trim().substring(0, str.length - 1);
-
-            // Apply line delimiter
-            str += o.lineDelimiter;
-        });
-
-        // Remove trailing line delimiter
-        str = str.trim().substring(0, str.length - 1);
-
-        if (o.download) {
-            this.string = "data:text/csv;charset=utf-8," + str;
-            this.download();
-        }
-    };
-
-    Exporter.prototype.toSQL = function(config) {
-        if (config && isObject(config)) {
-            this.config = extend(this.config, config);
-        }
-
-        this.config.type = "sql";
-
-        var o = this.config,
-            table = this.instance.table;
-
-        // Begin INSERT statement
-        var str = "INSERT INTO `" + o.tableName + "` (";
-
-        // Convert table headings to column names
-        each(table.header.cells, function(cell) {
-            if (!cell.hidden && o.skipColumns.indexOf(cell.index) < 0) {
-                str += "`" + cell.content + "`,";
-            }
-        });
-
-        // Remove trailing comma
-        str = str.trim().substring(0, str.length - 1);
-
-        // Begin VALUES
-        str += ") VALUES ";
-
-        // Iterate rows and convert cell data to column values
-        each(table.rows, function(row) {
-            str += "(";
-
-            each(row.cells, function(cell) {
-                if (!cell.hidden && o.skipColumns.indexOf(cell.index) < 0) {
-                    str += "`" + cell.content + "`,";
-                }
-            });
-
-            // Remove trailing comma
-            str = str.trim().substring(0, str.length - 1);
-
-            // end VALUES
-            str += "),";
-        });
-
-        // Remove trailing comma
-        str = str.trim().substring(0, str.length - 1);
-
-        // Add trailing colon
-        str += ";";
-
-        if (o.download) {
-            this.string = "data:application/sql;charset=utf-8," + str;
-            this.download();
-        }
-
-        return str;
-    };
-
-    Exporter.prototype.download = function(str) {
-
-        // Download
-        if (this.string) {
-            // Filename
-            this.config.filename = this.config.filename || "datatable_export";
-            this.config.filename += "." + this.config.type;
-
-            this.string = encodeURI(this.string);
-
-            // Create a link to trigger the download
-            var link = createElement("a");
-            link.href = this.string;
-            link.download = this.config.filename;
-
-            // Append the link
-            body.appendChild(link);
-
-            // Trigger the download
-            link.click();
-
-            // Remove the link
-            body.removeChild(link);
-        }
-    };
-
     // MAIN LIB
     var DataTable = function(table, config) {
         this.config = extend(defaultConfig, config);
@@ -1248,6 +1057,25 @@
         var that = this;
         setTimeout(function() {
             that.emit("datatable.init");
+
+            if (that.config.plugins) {
+                each(that.config.plugins, function(options, plugin) {
+                    if (that[plugin] && typeof that[plugin] === "function") {
+                        that[plugin] = that[plugin](that, options, {
+                            each: each,
+                            extend: extend,
+                            isObject: isObject,
+                            classList: classList,
+                            createElement: createElement
+                        });
+
+                        // Init plugin
+                        if (options.enabled && that[plugin].init && typeof that[plugin].init === "function") {
+                            that[plugin].init();
+                        }
+                    }
+                });
+            }
         }, 10);
     };
 
@@ -1613,6 +1441,20 @@
         if (event in this.events === false) return;
         for (var i = 0; i < this.events[event].length; i++) {
             this.events[event][i].apply(this, Array.prototype.slice.call(arguments, 1));
+        }
+    };
+
+    /**
+     * Add custom property or method to extend DataTable
+     * @param  {String} prop    - Method name or property
+     * @param  {Mixed} val      - Function or property value
+     * @return {Void}
+     */
+    DataTable.extend = function(prop, val) {
+        if (typeof val === "function") {
+            DataTable.prototype[prop] = val;
+        } else {
+            DataTable[prop] = val;
         }
     };
 
