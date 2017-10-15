@@ -4,7 +4,7 @@
  * Copyright (c) 2015-2017 Karl Saunders (http://mobius.ovh)
  * Licensed under MIT (http://www.opensource.org/licenses/mit-license.php)
  *
- * Version: 2.0.0-alpha.16
+ * Version: 2.0.0-alpha.17
  *
  */
 (function(root, factory) {
@@ -13,11 +13,11 @@
 	if (typeof exports === "object") {
 		module.exports = factory(plugin);
 	} else if (typeof define === "function" && define.amd) {
-		define([], factory(plugin));
+		define([], factory);
 	} else {
 		root[plugin] = factory(plugin);
 	}
-})(typeof global !== 'undefined' ? global : this.window || this.global, function(plugin) {
+})(typeof global !== 'undefined' ? global : this.window || this.global, function() {
 	"use strict";
 	var win = window,
 		doc = document,
