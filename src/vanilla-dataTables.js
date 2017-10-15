@@ -4,7 +4,7 @@
  * Copyright (c) 2015-2017 Karl Saunders (http://mobius.ovh)
  * Licensed under MIT (http://www.opensource.org/licenses/mit-license.php)
  *
- * Version: 2.0.0-alpha.15
+ * Version: 2.0.0-alpha.16
  *
  */
 (function(root, factory) {
@@ -392,98 +392,100 @@
 		}
 	};
 
-	Table.prototype.build = function(data) {
-		var thead = false,
-			tbody = false;
+	Table.prototype = {
+		build: function(data) {
+			var thead = false,
+				tbody = false;
 
-		if (data.headings) {
-			thead = createElement("thead");
-			var tr = createElement("tr");
-			each(data.headings, function(col) {
-				var td = createElement("th", {
-					html: col
-				});
-				tr.appendChild(td);
-			});
-
-			thead.appendChild(tr);
-		}
-
-		if (data.data && data.data.length) {
-			tbody = createElement("tbody");
-			each(data.data, function(rows) {
+			if (data.headings) {
+				thead = createElement("thead");
 				var tr = createElement("tr");
-				each(rows, function(value) {
-					var td = createElement("td", {
-						html: value
+				each(data.headings, function(col) {
+					var td = createElement("th", {
+						html: col
 					});
 					tr.appendChild(td);
 				});
-				tbody.appendChild(tr);
+
+				thead.appendChild(tr);
+			}
+
+			if (data.data && data.data.length) {
+				tbody = createElement("tbody");
+				each(data.data, function(rows) {
+					var tr = createElement("tr");
+					each(rows, function(value) {
+						var td = createElement("td", {
+							html: value
+						});
+						tr.appendChild(td);
+					});
+					tbody.appendChild(tr);
+				});
+			}
+
+			if (thead) {
+				if (this.node.tHead !== null) {
+					this.node.removeChild(this.node.tHead);
+				}
+				this.node.appendChild(thead);
+			}
+
+			if (tbody) {
+				if (this.node.tBodies.length) {
+					this.node.removeChild(this.node.tBodies[0]);
+				}
+				this.node.appendChild(tbody);
+			}
+		},
+
+		addHeader: function() {
+			var th = createElement("thead"),
+				tr = createElement("tr");
+
+			each(this.rows[0].cells, function(cell) {
+				tr.appendChild(createElement("td"));
+			});
+
+			th.appendChild(tr);
+
+			this.head = th;
+			this.header = new Row(tr, 1);
+			this.hasHeader = true;
+		},
+
+		addRow: function(row, at, update) {
+			if (row instanceof Row) {
+				this.rows.splice(at || 0, 0, row);
+
+				// We may have a table without a header
+				if (!this.hasHeader) {
+					this.addHeader();
+				}
+
+				if (update) {
+					this.update();
+				}
+
+				return row;
+			}
+		},
+
+		removeRow: function(row, update) {
+			if (row instanceof Row) {
+				this.rows.splice(this.rows.indexOf(row), 1);
+
+				if (update) {
+					this.update();
+				}
+			}
+		},
+
+		update: function(all) {
+			each(this.rows, function(row, i) {
+				row.index = row.node.dataIndex = i;
 			});
 		}
-
-		if (thead) {
-			if (this.node.tHead !== null) {
-				this.node.removeChild(this.node.tHead);
-			}
-			this.node.appendChild(thead);
-		}
-
-		if (tbody) {
-			if (this.node.tBodies.length) {
-				this.node.removeChild(this.node.tBodies[0]);
-			}
-			this.node.appendChild(tbody);
-		}
-	};
-
-	Table.prototype.addHeader = function() {
-		var th = createElement("thead"),
-			tr = createElement("tr");
-
-		each(this.rows[0].cells, function(cell) {
-			tr.appendChild(createElement("td"));
-		});
-
-		th.appendChild(tr);
-
-		this.head = th;
-		this.header = new Row(tr, 1);
-		this.hasHeader = true;
-	};
-
-	Table.prototype.addRow = function(row, at, update) {
-		if (row instanceof Row) {
-			this.rows.splice(at || 0, 0, row);
-
-			// We may have a table without a header
-			if (!this.hasHeader) {
-				this.addHeader();
-			}
-
-			if (update) {
-				this.update();
-			}
-
-			return row;
-		}
-	};
-
-	Table.prototype.removeRow = function(row, update) {
-		if (row instanceof Row) {
-			this.rows.splice(this.rows.indexOf(row), 1);
-
-			if (update) {
-				this.update();
-			}
-		}
-	};
-
-	Table.prototype.update = function(all) {
-		each(this.rows, function(row, i) {
-			row.index = row.node.dataIndex = i;
-		});
 	};
 
 	// PAGER
@@ -492,105 +494,107 @@
 		this.parent = parent;
 	};
 
-	Pager.prototype.render = function(pages) {
-		var that = this,
-			dt = that.instance,
-			o = dt.config;
+	Pager.prototype = {
+		render: function(pages) {
+			var that = this,
+				dt = that.instance,
+				o = dt.config;
 
-		pages = pages || dt.totalPages;
+			pages = pages || dt.totalPages;
 
-		empty(that.parent, that.isIE);
+			empty(that.parent, that.isIE);
 
-		if (pages > 1) {
-			var c = "pager",
-				ul = createElement("ul"),
-				prev = dt.onFirstPage ? 1 : dt.currentPage - 1,
-				next = dt.onlastPage ? pages : dt.currentPage + 1;
+			if (pages > 1) {
+				var c = "pager",
+					ul = createElement("ul"),
+					prev = dt.onFirstPage ? 1 : dt.currentPage - 1,
+					next = dt.onlastPage ? pages : dt.currentPage + 1;
 
-			// first button
-			if (o.firstLast) {
-				ul.appendChild(that.button(c, 1, o.firstText));
-			}
-
-			// prev button
-			if (o.nextPrev) {
-				ul.appendChild(that.button(c, prev, o.prevText));
-			}
-
-			var pager = that.truncate();
-			// append the links
-			each(pager, function(btn) {
-				ul.appendChild(btn);
-			});
-
-			// next button
-			if (o.nextPrev) {
-				ul.appendChild(that.button(c, next, o.nextText));
-			}
-
-			// first button
-			if (o.firstLast) {
-				ul.appendChild(that.button(c, pages, o.lastText));
-			}
-
-			that.parent.appendChild(ul);
-		}
-	};
-
-	Pager.prototype.truncate = function() {
-		var that = this,
-			o = that.instance.config,
-			delta = o.pagerDelta * 2,
-			page = that.instance.currentPage,
-			left = page - o.pagerDelta,
-			right = page + o.pagerDelta,
-			pages = that.instance.totalPages,
-			range = [],
-			pager = [],
-			n;
-
-		// No need to truncate if it's disabled
-		if (!o.truncatePager) {
-			each(pages, function(index) {
-				pager.push(that.button(index == page ? "active" : "", index, index));
-			});
-		} else {
-			if (page < 4 - o.pagerDelta + delta) {
-				right = 3 + delta;
-			} else if (page > pages - (3 - o.pagerDelta + delta)) {
-				left = pages - (2 + delta);
-			}
-
-			// Get the links that will be visible
-			for (var i = 1; i <= pages; i++) {
-				if (i == 1 || i == pages || (i >= left && i <= right)) {
-					range.push(i);
+				// first button
+				if (o.firstLast) {
+					ul.appendChild(that.button(c, 1, o.firstText));
 				}
-			}
 
-			each(range, function(index) {
-				if (n) {
-					if (index - n == 2) {
-						pager.push(that.button("", n + 1, n + 1));
-					} else if (index - n != 1) {
-						// Create ellipsis node
-						pager.push(that.button(o.classes.ellipsis, 0, o.ellipsisText, true));
+				// prev button
+				if (o.nextPrev) {
+					ul.appendChild(that.button(c, prev, o.prevText));
+				}
+
+				var pager = that.truncate();
+				// append the links
+				each(pager, function(btn) {
+					ul.appendChild(btn);
+				});
+
+				// next button
+				if (o.nextPrev) {
+					ul.appendChild(that.button(c, next, o.nextText));
+				}
+
+				// first button
+				if (o.firstLast) {
+					ul.appendChild(that.button(c, pages, o.lastText));
+				}
+
+				that.parent.appendChild(ul);
+			}
+		},
+
+		truncate: function() {
+			var that = this,
+				o = that.instance.config,
+				delta = o.pagerDelta * 2,
+				page = that.instance.currentPage,
+				left = page - o.pagerDelta,
+				right = page + o.pagerDelta,
+				pages = that.instance.totalPages,
+				range = [],
+				pager = [],
+				n;
+
+			// No need to truncate if it's disabled
+			if (!o.truncatePager) {
+				each(pages, function(index) {
+					pager.push(that.button(index == page ? "active" : "", index, index));
+				});
+			} else {
+				if (page < 4 - o.pagerDelta + delta) {
+					right = 3 + delta;
+				} else if (page > pages - (3 - o.pagerDelta + delta)) {
+					left = pages - (2 + delta);
+				}
+
+				// Get the links that will be visible
+				for (var i = 1; i <= pages; i++) {
+					if (i == 1 || i == pages || (i >= left && i <= right)) {
+						range.push(i);
 					}
 				}
 
-				pager.push(that.button(index == page ? "active" : "", index, index));
-				n = index;
+				each(range, function(index) {
+					if (n) {
+						if (index - n == 2) {
+							pager.push(that.button("", n + 1, n + 1));
+						} else if (index - n != 1) {
+							// Create ellipsis node
+							pager.push(that.button(o.classes.ellipsis, 0, o.ellipsisText, true));
+						}
+					}
+
+					pager.push(that.button(index == page ? "active" : "", index, index));
+					n = index;
+				});
+			}
+
+			return pager;
+		},
+
+		button: function(className, pageNum, content, ellipsis) {
+			return createElement("li", {
+				class: className,
+				html: !ellipsis ? '<a href="#" data-page="' + pageNum + '">' + content + "</a>" : '<span>' + content + "</span>"
 			});
 		}
-
-		return pager;
-	};
-
-	Pager.prototype.button = function(className, pageNum, content, ellipsis) {
-		return createElement("li", {
-			class: className,
-			html: !ellipsis ? '<a href="#" data-page="' + pageNum + '">' + content + "</a>" : '<span>' + content + "</span>"
-		});
 	};
 
 	// ROWS
@@ -598,128 +602,130 @@
 		this.instance = instance;
 	};
 
-	Rows.prototype.render = function(page) {
-		var that = this,
-			dt = that.instance;
-		page = page || dt.currentPage;
+	Rows.prototype = {
+		render: function(page) {
+			var that = this,
+				dt = that.instance;
+			page = page || dt.currentPage;
 
-		empty(dt.table.body);
+			empty(dt.table.body);
 
-		if (page < 1 || page > dt.totalPages) return;
+			if (page < 1 || page > dt.totalPages) return;
 
-		var that = this,
-			head = dt.table.header,
-			fragment = document.createDocumentFragment();
+			var that = this,
+				head = dt.table.header,
+				fragment = document.createDocumentFragment();
 
-		if (dt.table.hasHeader) {
-			empty(head.node);
-			each(head.cells, function(cell) {
-				if (!cell.hidden) {
-					head.node.appendChild(cell.node);
-				}
-			});
-		}
-
-		if (dt.pages.length) {
-			each(dt.pages[page - 1], function(row) {
-				empty(row.node);
-
-				each(row.cells, function(cell) {
+			if (dt.table.hasHeader) {
+				empty(head.node);
+				each(head.cells, function(cell) {
 					if (!cell.hidden) {
-						row.node.appendChild(cell.node);
+						head.node.appendChild(cell.node);
 					}
 				});
-
-				fragment.append(row.node);
-			});
-		}
-
-		dt.table.body.appendChild(fragment);
-
-		each(dt.pagers, function(pager) {
-			pager.render();
-		});
-
-		dt.getInfo();
-
-		dt.emit("datatable.render");
-	};
-
-	Rows.prototype.paginate = function() {
-		var o = this.instance.config,
-			rows = this.instance.table.rows,
-			dt = this.instance;
-
-		if (dt.searching && dt.searchData) {
-			rows = dt.searchData;
-		}
-
-		dt.pages = rows
-			.map(function(tr, i) {
-				return i % o.perPage === 0 ? rows.slice(i, i + o.perPage) : null;
-			})
-			.filter(function(page) {
-				return page;
-			});
-
-		dt.totalPages = dt.pages.length;
-	};
-
-	Rows.prototype.add = function(row, at) {
-		if (isArray(row)) {
-			at = at || 0;
-			if (isArray(row[0])) {
-				each(row, function(tr) {
-					tr = this.instance.table.addRow(new Row(tr, this.instance.table.rows.length + 1), at);
-				}, this);
-				// only update after adding multiple rows
-				// to keep performance hit to a minimum
-				this.instance.table.update();
-			} else {
-				row = this.instance.table.addRow(new Row(row, this.instance.table.rows.length + 1), at, true);
 			}
 
-			this.instance.update();
+			if (dt.pages.length) {
+				each(dt.pages[page - 1], function(row) {
+					empty(row.node);
 
-			return row;
-		}
-	};
+					each(row.cells, function(cell) {
+						if (!cell.hidden) {
+							row.node.appendChild(cell.node);
+						}
+					});
 
-	Rows.prototype.remove = function(obj) {
-		var row = false,
-			dt = this.instance;
-
-		if (isArray(obj)) {
-			// reverse order or there'll be shit to pay
-			for (var i = obj.length - 1; i >= 0; i--) {
-				dt.table.removeRow(this.get(obj[i]));
+					fragment.append(row.node);
+				});
 			}
-			dt.table.update();
-			dt.update();
-		} else {
-			if (row = this.get(obj)) {
-				dt.table.removeRow(row, true);
-				dt.update();
+
+			dt.table.body.appendChild(fragment);
+
+			each(dt.pagers, function(pager) {
+				pager.render();
+			});
+
+			dt.getInfo();
+
+			dt.emit("datatable.rows.render");
+		},
+
+		paginate: function() {
+			var o = this.instance.config,
+				rows = this.instance.table.rows,
+				dt = this.instance;
+
+			if (dt.searching && dt.searchData) {
+				rows = dt.searchData;
+			}
+
+			dt.pages = rows
+				.map(function(tr, i) {
+					return i % o.perPage === 0 ? rows.slice(i, i + o.perPage) : null;
+				})
+				.filter(function(page) {
+					return page;
+				});
+
+			dt.totalPages = dt.pages.length;
+		},
+
+		add: function(row, at) {
+			if (isArray(row)) {
+				at = at || 0;
+				if (isArray(row[0])) {
+					each(row, function(tr) {
+						tr = this.instance.table.addRow(new Row(tr, this.instance.table.rows.length + 1), at);
+					}, this);
+					// only update after adding multiple rows
+					// to keep performance hit to a minimum
+					this.instance.table.update();
+				} else {
+					row = this.instance.table.addRow(new Row(row, this.instance.table.rows.length + 1), at, true);
+				}
+
+				this.instance.update();
 
 				return row;
 			}
-		}
-	};
+		},
 
-	Rows.prototype.get = function(row) {
-		var rows = this.instance.table.rows;
-		if (row instanceof Row || row instanceof Element) {
-			for (var n = 0; n < rows.length; n++) {
-				if (rows[n].node === row || rows[n] === row) {
-					row = rows[n];
-					break;
+		remove: function(obj) {
+			var row = false,
+				dt = this.instance;
+
+			if (isArray(obj)) {
+				// reverse order or there'll be shit to pay
+				for (var i = obj.length - 1; i >= 0; i--) {
+					dt.table.removeRow(this.get(obj[i]));
+				}
+				dt.table.update();
+				dt.update();
+			} else {
+				if (row = this.get(obj)) {
+					dt.table.removeRow(row, true);
+					dt.update();
+
+					return row;
 				}
 			}
-		} else {
-			row = rows[row];
-		}
+		},
 
-		return row;
+		get: function(row) {
+			var rows = this.instance.table.rows;
+			if (row instanceof Row || row instanceof Element) {
+				for (var n = 0; n < rows.length; n++) {
+					if (rows[n].node === row || rows[n] === row) {
+						row = rows[n];
+						break;
+					}
+				}
+			} else {
+				row = rows[row];
+			}
+
+			return row;
+		}
 	};
 
 	// COLUMNS
@@ -727,237 +733,249 @@
 		this.instance = instance;
 	};
 
-	Columns.prototype.sort = function(column, direction) {
+	Columns.prototype = {
+		sort: function(column, direction) {
 
-		var dt = this.instance;
+			var dt = this.instance;
 
-		column = column || 0;
-		direction = direction || (dt.lastDirection && "asc" === dt.lastDirection ? direction = "desc" : direction = "asc");
+			column = column || 0;
+			direction = direction || (dt.lastDirection && "asc" === dt.lastDirection ? direction = "desc" : direction = "asc");
 
-		if (column < 0 || column > dt.table.header.cells.length - 1) {
-			return false;
-		}
+			if (column < 0 || column > dt.table.header.cells.length - 1) {
+				return false;
+			}
 
-		var node = dt.table.header.cells[column].node,
-			rows = dt.table.rows;
+			var node = dt.table.header.cells[column].node,
+				rows = dt.table.rows;
 
-		if (dt.searching && dt.searchData) {
-			rows = dt.searchData;
-		}
+			if (dt.searching && dt.searchData) {
+				rows = dt.searchData;
+			}
 
-		// Remove class from previus column
-		if (dt.lastHeading) {
-			classList.remove(dt.lastHeading, dt.lastDirection);
-		}
+			// Remove class from previus column
+			if (dt.lastHeading) {
+				classList.remove(dt.lastHeading, dt.lastDirection);
+			}
 
-		if (dt.lastDirection) {
-			classList.remove(node, dt.lastDirection);
-		}
+			if (dt.lastDirection) {
+				classList.remove(node, dt.lastDirection);
+			}
 
-		classList.add(node, direction);
+			classList.add(node, direction);
 
-		var format, datetime;
+			var format, datetime;
 
-		if (node.hasAttribute("data-type")) {
-			// Check for date format and moment.js
-			if (node.getAttribute("data-type") === "date") {
-				format = false;
-				datetime = node.hasAttribute("data-format");
+			if (node.hasAttribute("data-type")) {
+				// Check for date format and moment.js
+				if (node.getAttribute("data-type") === "date") {
+					format = false;
+					datetime = node.hasAttribute("data-format");
+
+					if (datetime) {
+						format = node.getAttribute("data-format");
+					}
+				}
+			}
+
+			rows.sort(function(a, b) {
+				a = a.cells[column].content;
+				b = b.cells[column].content;
 
 				if (datetime) {
-					format = node.getAttribute("data-format");
+					a = parseDate(a, format);
+					b = parseDate(b, format);
+				} else {
+					a = a.replace(/(\$|\,|\s|%)/g, "");
+					b = b.replace(/(\$|\,|\s|%)/g, "");
 				}
-			}
-		}
 
-		rows.sort(function(a, b) {
-			a = a.cells[column].content;
-			b = b.cells[column].content;
+				a = !isNaN(a) ? parseInt(a, 10) : a;
+				b = !isNaN(b) ? parseInt(b, 10) : b;
 
-			if (datetime) {
-				a = parseDate(a, format);
-				b = parseDate(b, format);
-			} else {
-				a = a.replace(/(\$|\,|\s|%)/g, "");
-				b = b.replace(/(\$|\,|\s|%)/g, "");
-			}
-
-			a = !isNaN(a) ? parseInt(a, 10) : a;
-			b = !isNaN(b) ? parseInt(b, 10) : b;
-
-			return direction === "asc" ? a > b : a < b;
-		});
-
-		dt.table.update();
-		dt.update();
-
-		dt.lastHeading = node;
-		dt.lastDirection = direction;
-
-		classList.remove(node, "loading");
-	};
-
-	Columns.prototype.filter = function(column, query) {
-		this.instance.search(query, column);
-	};
-
-	Columns.prototype.order = function(order) {
-		var dt = this.instance,
-			head = dt.table.header,
-			rows = dt.table.rows,
-			arr;
-
-		// Reorder the header
-		if (dt.table.hasHeader) {
-			arr = [], arrB = [];
-			each(order, function(column, i) {
-				arr[i] = head.cells[column];
-
-				arr[i].index = arr[i].node.dataIndex = i;
-
-				// rearrange the tr node cells for rendering
-				head.node.appendChild(arr[i].node);
+				return direction === "asc" ? a > b : a < b;
 			});
-			head.cells = arr;
-		}
 
-		// Reorder the body
-		each(rows, function(row) {
-			arr = [];
-			each(order, function(column, i) {
-				arr[i] = row.cells[column];
+			dt.table.update();
+			dt.update();
 
-				arr[i].index = arr[i].node.dataIndex = i;
+			dt.lastHeading = node;
+			dt.lastDirection = direction;
 
-				row.node.appendChild(arr[i].node);
-			});
-			row.cells = arr;
-		});
+			dt.emit("datatable.columns.sort", direction, column, node);
 
-		dt.update();
-	};
+			classList.remove(node, "loading");
+		},
 
-	Columns.prototype.hide = function(columns) {
-		var that = this,
-			dt = this.instance,
-			head = dt.table.header,
-			rows = dt.table.rows;
+		filter: function(column, query) {
+			this.instance.search(query, column);
+		},
 
-		if (!isNaN(columns)) {
-			columns = [columns];
-		}
+		order: function(order) {
+			var dt = this.instance,
+				head = dt.table.header,
+				rows = dt.table.rows,
+				arr;
+			if (isArray(order)) {
+				// Reorder the header
+				if (dt.table.hasHeader) {
+					arr = [];
+					each(order, function(column, i) {
+						arr[i] = head.cells[column];
 
-		for (var n = 0; n < columns.length; n++) {
-			each(head.cells, function(cell) {
-				if (columns[n] == cell.index) {
-					cell.hidden = true;
+						arr[i].index = arr[i].node.dataIndex = i;
+
+						// rearrange the tr node cells for rendering
+						head.node.appendChild(arr[i].node);
+					});
+					head.cells = arr;
 				}
-			});
 
-			each(rows, function(row) {
-				each(row.cells, function(cell) {
+				// Reorder the body
+				each(rows, function(row) {
+					arr = [];
+					each(order, function(column, i) {
+						arr[i] = row.cells[column];
+
+						arr[i].index = arr[i].node.dataIndex = i;
+
+						row.node.appendChild(arr[i].node);
+					});
+					row.cells = arr;
+				});
+
+				dt.update();
+
+				dt.emit("datatable.columns.order", order);
+			}
+		},
+
+		hide: function(columns) {
+			var that = this,
+				dt = this.instance,
+				head = dt.table.header,
+				rows = dt.table.rows;
+
+			if (!isNaN(columns)) {
+				columns = [columns];
+			}
+
+			for (var n = 0; n < columns.length; n++) {
+				each(head.cells, function(cell) {
 					if (columns[n] == cell.index) {
 						cell.hidden = true;
 					}
 				});
-			});
-		}
-		this.instance.update();
-	};
 
-	Columns.prototype.show = function(columns) {
-		var that = this,
-			dt = this.instance,
-			head = dt.table.header,
-			rows = dt.table.rows;
+				each(rows, function(row) {
+					each(row.cells, function(cell) {
+						if (columns[n] == cell.index) {
+							cell.hidden = true;
+						}
+					});
+				});
+			}
 
-		if (!isNaN(columns)) {
-			columns = [columns];
-		}
+			dt.update();
 
-		for (var n = 0; n < columns.length; n++) {
-			each(head.cells, function(cell) {
-				if (columns[n] == cell.index) {
-					cell.hidden = false;
-				}
-			});
+			dt.emit("datatable.columns.hide", columns);
+		},
 
-			each(rows, function(row) {
-				each(row.cells, function(cell) {
+		show: function(columns) {
+			var that = this,
+				dt = this.instance,
+				head = dt.table.header,
+				rows = dt.table.rows;
+
+			if (!isNaN(columns)) {
+				columns = [columns];
+			}
+
+			for (var n = 0; n < columns.length; n++) {
+				each(head.cells, function(cell) {
 					if (columns[n] == cell.index) {
 						cell.hidden = false;
 					}
 				});
-			});
-		}
 
-		this.instance.update();
-	};
-
-	Columns.prototype.visible = function(columns) {
-		var that = this,
-			dt = this.instance,
-			head = dt.table.header,
-			cols;
-
-		if (columns === undefined) {
-			columns = head.cells.map(function(cell) {
-				return cell.index;
-			});
-		}
-
-		if (!isNaN(columns)) {
-			cols = !head.cells[columns].hidden;
-		} else if (isArray(columns)) {
-			cols = [];
-			each(columns, function(column) {
-				cols.push(!head.cells[column].hidden);
-			});
-		}
-
-		return cols;
-	};
-
-	Columns.prototype.add = function(obj) {
-		var dt = this.instance;
-
-		if (isObject(obj)) {
-			if (isset(obj, "heading")) {
-				var cell = new Cell(createElement("th"), dt.table.header.cells.length);
-				cell.setContent(obj.heading);
-
-				dt.table.header.node.appendChild(cell.node);
-				dt.table.header.cells.push(cell);
-			}
-
-			if (isset(obj, "data") && isArray(obj.data)) {
-				each(dt.table.rows, function(row, i) {
-					var cell = new Cell(createElement("td"), row.cells.length);
-					cell.setContent(obj.data[i] || "");
-
-					row.node.appendChild(cell.node);
-					row.cells.push(cell);
+				each(rows, function(row) {
+					each(row.cells, function(cell) {
+						if (columns[n] == cell.index) {
+							cell.hidden = false;
+						}
+					});
 				});
 			}
+
+			dt.update();
+
+			dt.emit("datatable.columns.show", columns);
+		},
+
+		visible: function(columns) {
+			var that = this,
+				dt = this.instance,
+				head = dt.table.header,
+				cols;
+
+			if (columns === undefined) {
+				columns = head.cells.map(function(cell) {
+					return cell.index;
+				});
+			}
+
+			if (!isNaN(columns)) {
+				cols = !head.cells[columns].hidden;
+			} else if (isArray(columns)) {
+				cols = [];
+				each(columns, function(column) {
+					cols.push(!head.cells[column].hidden);
+				});
+			}
+
+			return cols;
+		},
+
+		add: function(obj) {
+			var dt = this.instance;
+
+			if (isObject(obj)) {
+				if (isset(obj, "heading")) {
+					var cell = new Cell(createElement("th"), dt.table.header.cells.length);
+					cell.setContent(obj.heading);
+
+					dt.table.header.node.appendChild(cell.node);
+					dt.table.header.cells.push(cell);
+				}
+
+				if (isset(obj, "data") && isArray(obj.data)) {
+					each(dt.table.rows, function(row, i) {
+						var cell = new Cell(createElement("td"), row.cells.length);
+						cell.setContent(obj.data[i] || "");
+
+						row.node.appendChild(cell.node);
+						row.cells.push(cell);
+					});
+				}
+			}
+
+			this.fix();
+			dt.update();
+		},
+
+		remove: function() {
+			//
+		},
+
+		fix: function() {
+			each(
+				this.instance.columnWidths,
+				function(size, cell) {
+					var w = size / this.instance.rect.width * 100;
+					this.instance.table.header.cells[cell].node.style.width = w + "%";
+				},
+				this
+			);
 		}
-
-		this.fix();
-		dt.update();
-	};
-
-	Columns.prototype.remove = function() {
-		//
-	};
-
-	Columns.prototype.fix = function() {
-		each(
-			this.instance.columnWidths,
-			function(size, cell) {
-				var w = size / this.instance.rect.width * 100;
-				this.instance.table.header.cells[cell].node.style.width = w + "%";
-			},
-			this
-		);
 	};
 
 	// MAIN LIB
@@ -1129,9 +1147,8 @@
 				o = that.config;
 
 			on(that.wrapper, "mousedown", function(e) {
-				var node = e.target
-				if (o.sortable && node.nodeName === "TH") {
-					classList.add(node, "loading");
+				if (e.which === 1 && o.sortable && e.target.nodeName === "TH") {
+					classList.add(e.target, "loading");
 				}
 			});
 
