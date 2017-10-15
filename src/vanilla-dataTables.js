@@ -4,7 +4,7 @@
  * Copyright (c) 2015-2017 Karl Saunders (http://mobius.ovh)
  * Licensed under MIT (http://www.opensource.org/licenses/mit-license.php)
  *
- * Version: 2.0.0-alpha.14
+ * Version: 2.0.0-alpha.15
  *
  */
 (function(root, factory) {
@@ -71,8 +71,6 @@
 			search: "dataTable-search",
 			ellipsis: "dataTable-ellipsis",
 			sorter: "dataTable-sorter",
-			filter: "dataTable-filter",
-			filterable: "dataTable-filterable",
 		},
 
 		// Customise the display text
@@ -790,13 +788,13 @@
 			return direction === "asc" ? a > b : a < b;
 		});
 
-		console.log(rows[0].cells[column].content, rows[1].cells[column].content)
-
 		dt.table.update();
 		dt.update();
 
 		dt.lastHeading = node;
 		dt.lastDirection = direction;
+
+		classList.remove(node, "loading");
 	};
 
 	Columns.prototype.filter = function(column, query) {
@@ -807,7 +805,7 @@
 		var dt = this.instance,
 			head = dt.table.header,
 			rows = dt.table.rows,
-			arr, arrB;
+			arr;
 
 		// Reorder the header
 		if (dt.table.hasHeader) {
@@ -819,18 +817,8 @@
 
 				// rearrange the tr node cells for rendering
 				head.node.appendChild(arr[i].node);
-
-				if (dt.filter) {
-					arrB[i] = dt.filter.row.cells[column];
-					arrB[i].index = arrB[i].node.dataIndex = i;
-					dt.filter.row.node.appendChild(arrB[i].node);
-				}
 			});
 			head.cells = arr;
-
-			if (dt.filter) {
-				dt.filter.row.cells = arrB;
-			}
 		}
 
 		// Reorder the body
@@ -863,10 +851,6 @@
 			each(head.cells, function(cell) {
 				if (columns[n] == cell.index) {
 					cell.hidden = true;
-
-					if (dt.filter) {
-						dt.filter.row.cells[cell.index].hidden = true;
-					}
 				}
 			});
 
@@ -878,8 +862,6 @@
 				});
 			});
 		}
-
-		this.update();
 		this.instance.update();
 	};
 
@@ -897,10 +879,6 @@
 			each(head.cells, function(cell) {
 				if (columns[n] == cell.index) {
 					cell.hidden = false;
-
-					if (dt.filter) {
-						dt.filter.row.cells[cell.index].hidden = false;
-					}
 				}
 			});
 
@@ -913,7 +891,6 @@
 			});
 		}
 
-		this.update();
 		this.instance.update();
 	};
 
@@ -951,13 +928,6 @@
 
 				dt.table.header.node.appendChild(cell.node);
 				dt.table.header.cells.push(cell);
-
-				if (dt.filter) {
-					cell = new Cell(createElement("td"), dt.filter.row.cells.length);
-
-					dt.filter.row.node.appendChild(cell.node);
-					dt.filter.row.cells.push(cell);
-				}
 			}
 
 			if (isset(obj, "data") && isArray(obj.data)) {
@@ -990,75 +960,37 @@
 		);
 	};
 
-	Columns.prototype.update = function() {
-		var that = this,
-			dt = this.instance;
-
-		if (dt.filter) {
-			empty(dt.filter.row.node);
-			each(dt.filter.row.cells, function(cell) {
-				if (!cell.hidden) {
-					dt.filter.row.node.appendChild(cell.node);
-				}
-			});
-		}
-	};
-
-	var Ajax = function(config) {
-		this.config = config;
-		this.request = new XMLHttpRequest();
-
-		on(this.request, "load", this.load.bind(this));
-		on(this.request, "error", this.error.bind(this));
-		on(this.request, "abort", this.abort.bind(this));
-		on(this.request, "progress", this.progress.bind(this));
-	};
-
-	Ajax.prototype.send = function() {
-		this.request.open("GET", this.config.url);
-		this.request.send();
-	};
-
-	Ajax.prototype.load = function() {
-		if (this.request.readyState === 4) {
-			if (this.request.status === 200) {
-				if (this.config.load && typeof this.config.load === "function") {
-					this.config.load.call(this);
-				}
-			}
-		}
-	};
-
-	Ajax.prototype.error = function() {};
-	Ajax.prototype.abort = function() {};
-	Ajax.prototype.progress = function() {};
-
 	// MAIN LIB
 	var DataTable = function(table, config) {
 		this.config = extend(defaultConfig, config);
 
 		if (this.config.ajax) {
-			var that = this;
+			var that = this,
+				ajax = this.config.ajax;
 
-			this.request = new Ajax({
-				url: typeof ajax === "string" ? that.config.ajax : that.config.ajax.url,
-				load: function() {
-					var obj = {};
-					obj.data = that.config.ajax.load ? that.config.ajax.load.call(that, this.request) : this.request.responseText;
+			this.request = new XMLHttpRequest();
 
-					obj.type = "json";
+			on(this.request, "load", function(xhr) {
+				if (that.request.readyState === 4) {
+					if (that.request.status === 200) {
+						var obj = {};
+						obj.data = ajax.load ? ajax.load.call(that, that.request) : that.request.responseText;
 
-					if (that.config.ajax.content && that.config.ajax.content.type) {
-						obj.type = that.config.ajax.content.type;
-						obj = extend(obj, that.config.ajax.content);
+						obj.type = "json";
+
+						if (ajax.content && ajax.content.type) {
+							obj.type = ajax.content.type;
+							obj = extend(obj, ajax.content);
+						}
+
+						that.table = new Table(table, obj.data, that);
+
+						that.init();
 					}
-
-					that.table = new Table(table, obj.data, that);
-
-					that.init();
 				}
 			});
 
+			this.request.open("GET", typeof ajax === "string" ? that.config.ajax : that.config.ajax.url);
 			this.request.send();
 		} else {
 			if (this.config.data) {
@@ -1071,621 +1003,589 @@
 		}
 	};
 
-	DataTable.prototype.init = function() {
+	DataTable.prototype = {
+		init: function() {
 
-		if (this.initialised) return;
+			if (this.initialised) return;
 
-		var that = this,
-			o = that.config;
+			var that = this,
+				o = that.config;
 
-		// IE detection
-		that.isIE = !!/(msie|trident)/i.test(navigator.userAgent);
+			// IE detection
+			that.isIE = !!/(msie|trident)/i.test(navigator.userAgent);
 
-		that.currentPage = 1;
-		that.onFirstPage = true;
-		that.onLastPage = false;
+			that.currentPage = 1;
+			that.onFirstPage = true;
+			that.onLastPage = false;
 
-		that.rows().paginate();
-		that.totalPages = that.pages.length;
+			that.rows().paginate();
+			that.totalPages = that.pages.length;
 
-		that.render();
+			that.render();
 
-		if (o.fixedColumns) {
-			that.columns().fix();
-		}
+			if (o.fixedColumns) {
+				that.columns().fix();
+			}
 
-		if (o.plugins) {
-			each(o.plugins, function(options, plugin) {
-				if (that[plugin] !== undefined && typeof that[plugin] === "function") {
-					that[plugin] = that[plugin](that, options, {
-						each: each,
-						extend: extend,
-						isObject: isObject,
-						classList: classList,
-						createElement: createElement
-					});
+			if (o.plugins) {
+				each(o.plugins, function(options, plugin) {
+					if (that[plugin] !== undefined && typeof that[plugin] === "function") {
+						that[plugin] = that[plugin](that, options, {
+							each: each,
+							extend: extend,
+							isObject: isObject,
+							classList: classList,
+							createElement: createElement
+						});
 
-					// Init plugin
-					if (options.enabled && that[plugin].init && typeof that[plugin].init === "function") {
-						that[plugin].init();
+						// Init plugin
+						if (options.enabled && that[plugin].init && typeof that[plugin].init === "function") {
+							that[plugin].init();
+						}
 					}
-				}
-			});
-		}
+				});
+			}
 
-		// Check for the columns option
-		if (o.columns) {
-			that.selectedColumns = [];
-			that.columnRenderers = [];
+			// Check for the columns option
+			if (o.columns) {
+				that.selectedColumns = [];
+				that.columnRenderers = [];
 
-			each(o.columns, function(data) {
-				// convert single column selection to array
-				if (!isArray(data.select)) {
-					data.select = [data.select];
-				}
+				each(o.columns, function(data) {
+					// convert single column selection to array
+					if (!isArray(data.select)) {
+						data.select = [data.select];
+					}
 
-				if (isset(data, "render") && typeof data.render === "function") {
-					that.selectedColumns = that.selectedColumns.concat(data.select);
+					if (isset(data, "render") && typeof data.render === "function") {
+						that.selectedColumns = that.selectedColumns.concat(data.select);
 
-					that.columnRenderers.push({
-						columns: data.select,
-						renderer: data.render
-					});
-				}
+						that.columnRenderers.push({
+							columns: data.select,
+							renderer: data.render
+						});
+					}
 
-				// Add the data attributes to the th elements
-				if (that.table.hasHeader) {
-					each(data.select, function(column) {
-						var cell = that.table.header.cells[column];
+					// Add the data attributes to the th elements
+					if (that.table.hasHeader) {
+						each(data.select, function(column) {
+							var cell = that.table.header.cells[column];
 
-						if (data.type) {
-							cell.node.setAttribute("data-type", data.type);
-						}
-						if (data.format) {
-							cell.node.setAttribute("data-format", data.format);
-						}
-						if (isset(data, "sortable")) {
-							cell.node.setAttribute("data-sortable", data.sortable);
-
-							if (data.sortable === false) {
-								classList.remove(cell.node, o.classes.sorter);
+							if (data.type) {
+								cell.node.setAttribute("data-type", data.type);
 							}
-						}
-
-						if (isset(data, "hidden")) {
-							if (data.hidden !== false) {
-								that.columns().hide(column);
+							if (data.format) {
+								cell.node.setAttribute("data-format", data.format);
 							}
-						}
+							if (isset(data, "sortable")) {
+								cell.node.setAttribute("data-sortable", data.sortable);
 
-						if (isset(data, "sort") && data.select.length === 1) {
-							that.columns().sort(data.select[0], data.sort);
-						}
-
-						if (isset(data, "filterable")) {
-
-							var createInput = function(cell) {
-								var input, type;
-
-								if (!data.filterable.type || data.filterable.type === "text") {
-									input = createElement("input", {
-										type: "text",
-										class: o.classes.filter
-									});
-								} else if (data.filterable.type === "select") {
-									input = createElement("select", {
-										class: o.classes.filter
-									});
-
-									if (data.filterable.data) {
-										each(data.filterable.data, function(val) {
-											input.add(new Option(val, val, false, false));
-										});
-									}
+								if (data.sortable === false) {
+									classList.remove(cell.node, o.classes.sorter);
 								}
+							}
 
-								if (input) {
-									on(input, "input", function(e) {
-										that.columns().filter(cell.index, input.value);
-									});
+							if (isset(data, "hidden")) {
+								if (data.hidden !== false) {
+									that.columns().hide(column);
 								}
+							}
 
-								return input;
-							};
+							if (isset(data, "sort") && data.select.length === 1) {
+								that.columns().sort(data.select[0], data.sort);
+							}
+						});
+					}
+				});
 
-							if (that.filter) {
-								var td = that.filter.row.cells[column];
-
-								td.node.appendChild(createInput(td));
-
-								td.enabled = true;
-								classList.add(td.node, o.classes.filterable);
-							} else {
-								that.filter = {};
-
-								var tr = createElement("tr");
-
-								each(that.table.header.cells, function(cell) {
-									var td = createElement("td");
-
-									if (column == cell.index) {
-										td.appendChild(createInput(cell));
+				if (that.selectedColumns.length) {
+					each(that.table.rows, function(row) {
+						each(row.cells, function(cell) {
+							if (that.selectedColumns.indexOf(cell.index) > -1) {
+								each(that.columnRenderers, function(obj) {
+									if (obj.columns.indexOf(cell.index) > -1) {
+										cell.setContent(obj.renderer.call(that, cell.content, cell, row));
 									}
-
-									tr.appendChild(td);
 								});
-
-								that.filter.row = new Row(tr);
-
-								that.filter.row.cells[column].enabled = true;
-								classList.add(that.filter.row.cells[column].node, o.classes.filterable);
-
-								that.table.head.appendChild(that.filter.row.node);
 							}
-
-							if (data.filterable === false) {
-								classList.remove(that.filter.row.cells[cell.index].node, o.classes.filterable);
-							}
-						}
+						});
 					});
 				}
-			});
-
-			if (that.selectedColumns.length) {
-				each(that.table.rows, function(row) {
-					each(row.cells, function(cell) {
-						if (that.selectedColumns.indexOf(cell.index) > -1) {
-							each(that.columnRenderers, function(obj) {
-								if (obj.columns.indexOf(cell.index) > -1) {
-									cell.setContent(obj.renderer.call(that, cell.content, cell, row));
-								}
-							});
-						}
-					});
-				});
-			}
-		}
-
-		that.rows().render();
-
-		that.bindEvents();
-
-		that.initialised = true;
-
-		setTimeout(function() {
-			that.emit("datatable.init");
-		}, 10);
-	};
-
-	DataTable.prototype.bindEvents = function() {
-		var that = this,
-			o = that.config;
-
-		on(that.wrapper, "click", function(e) {
-			var node = e.target;
-
-			if (node.hasAttribute("data-page")) {
-				e.preventDefault();
-				that.page(parseInt(node.getAttribute("data-page"), 10));
 			}
 
-			if (o.sortable && node.nodeName === "TH") {
-				if (
-					node.hasAttribute("data-sortable") &&
-					node.getAttribute("data-sortable") === "false"
-				)
-					return false;
-				e.preventDefault();
-				that
-					.columns()
-					.sort(node.dataIndex, classList.contains(node, "asc") ? "desc" : "asc");
-			}
-		});
+			that.rows().render();
 
-		if (o.perPageSelect) {
-			on(that.wrapper, "change", function(e) {
-				if (
-					e.target.nodeName === "SELECT" &&
-					classList.contains(e.target, o.classes.selector)
-				) {
-					e.preventDefault();
-					that.config.perPage = parseInt(e.target.value, 10);
+			that.bindEvents();
 
-					that.update();
-				}
-			});
-		}
+			that.initialised = true;
 
-		if (o.searchable) {
-			on(that.wrapper, "keyup", function(e) {
-				if (
-					e.target.nodeName === "INPUT" &&
-					classList.contains(e.target, o.classes.input)
-				) {
-					e.preventDefault();
-					that.search(e.target.value);
-				}
-			});
-		}
+			setTimeout(function() {
+				that.emit("datatable.init");
+			}, 10);
+		},
 
-		if (o.sortable) {
+		bindEvents: function() {
+			var that = this,
+				o = that.config;
+
 			on(that.wrapper, "mousedown", function(e) {
-				if (e.target.nodeName === "TH") {
-					e.preventDefault();
+				var node = e.target
+				if (o.sortable && node.nodeName === "TH") {
+					classList.add(node, "loading");
 				}
 			});
-		}
-	};
 
-	DataTable.prototype.render = function() {
+			on(that.wrapper, "click", function(e) {
+				var node = e.target;
 
-		if (this.rendered) return;
+				if (node.hasAttribute("data-page")) {
+					e.preventDefault();
+					that.page(parseInt(node.getAttribute("data-page"), 10));
+				}
 
-		var that = this,
-			o = that.config;
+				if (o.sortable && node.nodeName === "TH") {
+					if (node.hasAttribute("data-sortable") && node.getAttribute("data-sortable") === "false") return false;
 
-		if (this.table.hasHeader && o.fixedColumns) {
-			this.columnWidths = this.table.header.cells.map(function(cell) {
-				return cell.node.offsetWidth;
-			});
-		}
-
-		// Build
-		that.wrapper = createElement("div", {
-			class: o.classes.wrapper
-		});
-
-		// Template for custom layouts
-		var inner = [
-			"<div class='", o.classes.top, "'>", o.layout.top, "</div>",
-			"<div class='", o.classes.container, "'></div>",
-			"<div class='", o.classes.bottom, "'>", o.layout.bottom, "</div>"
-		].join("");
-
-		// Info placement
-		inner = inner.replace(
-			"{info}",
-			"<div class='" + o.classes.info + "'></div>"
-		);
-
-		// Per Page Select
-		if (o.perPageSelect) {
-			var wrap = [
-				"<div class='", o.classes.dropdown, "'>",
-				"<label>", o.labels.perPage, "</label>",
-				"</div>"
-			].join("");
-
-			// Create the select
-			var select = createElement("select", {
-				class: o.classes.selector
+					e.preventDefault();
+					that
+						.columns()
+						.sort(node.dataIndex, classList.contains(node, "asc") ? "desc" : "asc");
+				}
 			});
 
-			// Create the options
-			each(o.perPageSelect, function(val) {
-				var selected = val === o.perPage;
-				var option = new Option(val, val, selected, selected);
-				select.add(option);
-			});
+			if (o.perPageSelect) {
+				on(that.wrapper, "change", function(e) {
+					if (
+						e.target.nodeName === "SELECT" &&
+						classList.contains(e.target, o.classes.selector)
+					) {
+						e.preventDefault();
+						that.config.perPage = parseInt(e.target.value, 10);
 
-			// Custom label
-			wrap = wrap.replace("{select}", select.outerHTML);
-
-			// Selector placement
-			inner = inner.replace("{select}", wrap);
-		} else {
-			inner = inner.replace("{select}", "");
-		}
-
-		// Searchable
-		if (o.searchable) {
-			var form = [
-				"<div class='", o.classes.search, "'>",
-				"<input class='", o.classes.input, "' placeholder='", o.labels.placeholder, "' type='text'>",
-				"</div>"
-			].join("");
-
-			// Search input placement
-			inner = inner.replace("{search}", form);
-		} else {
-			inner = inner.replace("{search}", "");
-		}
-
-		// Add table class
-		that.table.node.classList.add(o.classes.table);
-
-		// Pagers
-		each(inner.match(/\{pager\}/g), function(pager, i) {
-			inner = inner.replace(
-				"{pager}",
-				createElement("div", {
-					class: o.classes.pagination
-				}).outerHTML
-			);
-		});
-
-		that.wrapper.innerHTML = inner;
-
-		that.pagers = [].slice.call(
-			that.wrapper.querySelectorAll("." + o.classes.pagination)
-		);
-
-		each(that.pagers, function(pager, i) {
-			that.pagers[i] = new Pager(that, pager);
-		});
-
-		that.container = that.wrapper.querySelector("." + o.classes.container);
-
-		that.labels = that.wrapper.querySelectorAll("." + o.classes.info);
-
-		// Insert in to DOM tree
-		that.table.node.parentNode.replaceChild(that.wrapper, that.table.node);
-		that.container.appendChild(that.table.node);
-
-		// Store the table dimensions
-		that.rect = that.table.node.getBoundingClientRect();
-
-		that.rendered = true;
-	};
-
-	DataTable.prototype.update = function() {
-		this.rows().paginate();
-		this.rows().render();
-
-		this.emit("datatable.update");
-	};
-
-	DataTable.prototype.getInfo = function() {
-		// Update the info
-		var current = 0,
-			f = 0,
-			t = 0,
-			items;
-
-		if (this.totalPages) {
-			current = this.currentPage - 1;
-			f = current * this.config.perPage;
-			t = f + this.pages[current].length;
-			f = f + 1;
-			items = !!this.searching ? this.searchData.length : this.table.rows.length;
-		}
-
-		if (this.labels.length && this.config.labels.info.length) {
-			// CUSTOM LABELS
-			var string = this.config.labels.info
-				.replace("{start}", f)
-				.replace("{end}", t)
-				.replace("{page}", this.currentPage)
-				.replace("{pages}", this.totalPages)
-				.replace("{rows}", items);
-
-			each([].slice.call(this.labels), function(label) {
-				label.innerHTML = items ? string : "";
-			});
-		}
-	};
-
-	DataTable.prototype.search = function(query, column) {
-		var that = this;
-
-		query = query.toLowerCase();
-
-		that.currentPage = 1;
-		that.searching = true;
-		that.searchData = [];
-
-		if (!query.length) {
-			that.searching = false;
-			classList.remove(that.wrapper, "search-results");
-			that.update();
-
-			return false;
-		}
-
-		each(that.table.rows, function(row) {
-			var inArray = that.searchData.indexOf(row) > -1;
-
-			// Filter column
-			if (column !== undefined) {
-				each(row.cells, function(cell) {
-					if (column !== undefined && cell.index == column && !inArray) {
-						if (cell.content.toLowerCase().indexOf(query) >= 0) {
-							that.searchData.push(row);
-						}
+						that.update();
 					}
 				});
-			} else {
-				// https://github.com/Mobius1/Vanilla-DataTables/issues/12
-				var match = query.split(" ").reduce(function(bool, word) {
-					var includes = false;
-
-					for (var x = 0; x < row.cells.length; x++) {
-						if (row.cells[x].content.toLowerCase().indexOf(word) > -1) {
-							if (!row.cells[x].hidden ||
-								(row.cells[x].hidden && that.config.search.includeHiddenColumns)
-							)
-								includes = true;
-							break;
-						}
-					}
-
-					return bool && includes;
-				}, true);
-
-				if (match && !inArray) {
-					that.searchData.push(row);
-				}
 			}
-		});
 
-		classList.add(that.wrapper, "search-results");
-
-		if (!that.searchData.length) {
-			classList.remove(that.wrapper, "search-results");
-
-			that.setMessage(that.config.labels.noRows);
-		} else {
-			that.update();
-		}
-
-		this.emit("datatable.search", query, this.searchData);
-	};
-
-	DataTable.prototype.page = function(page) {
-		// We don't want to load the current page again.
-		if (page == this.currentPage) {
-			return false;
-		}
-
-		if (!isNaN(page)) {
-			this.currentPage = parseInt(page, 10);
-		}
-
-		this.onFirstPage = this.currentPage === 1;
-		this.onLastPage = this.currentPage === this.totalPages;
-
-		if (page > this.totalPages || page < 0) {
-			return false;
-		}
-
-		this.rows().render(page);
-
-		this.emit("datatable.page", page);
-	};
-
-	DataTable.prototype.import = function(options) {
-		var that = this,
-			obj = false;
-		var defaults = {
-			// csv
-			lineDelimiter: "\n",
-			columnDelimiter: ","
-		};
-
-		// Check for the options object
-		if (!isObject(options)) {
-			return false;
-		}
-
-		options = extend(defaults, options);
-
-		if (options.data.length || isObject(options.data)) {
-			// Import CSV
-			if (options.type === "csv") {
-				obj = {
-					data: []
-				};
-
-				// Split the string into rows
-				var rows = options.data.split(options.lineDelimiter);
-
-				if (rows.length) {
-
-					if (options.headings) {
-						obj.headings = rows[0].split(options.columnDelimiter);
-
-						rows.shift();
+			if (o.searchable) {
+				on(that.wrapper, "keyup", function(e) {
+					if (
+						e.target.nodeName === "INPUT" &&
+						classList.contains(e.target, o.classes.input)
+					) {
+						e.preventDefault();
+						that.search(e.target.value);
 					}
+				});
+			}
 
-					each(rows, function(row, i) {
-						obj.data[i] = [];
+			if (o.sortable) {
+				on(that.wrapper, "mousedown", function(e) {
+					if (e.target.nodeName === "TH") {
+						e.preventDefault();
+					}
+				});
+			}
+		},
 
-						// Split the rows into values
-						var values = row.split(options.columnDelimiter);
+		render: function() {
 
-						if (values.length) {
-							each(values, function(value) {
-								obj.data[i].push(value);
-							});
+			if (this.rendered) return;
+
+			var that = this,
+				o = that.config;
+
+			if (this.table.hasHeader && o.fixedColumns) {
+				this.columnWidths = this.table.header.cells.map(function(cell) {
+					return cell.node.offsetWidth;
+				});
+			}
+
+			// Build
+			that.wrapper = createElement("div", {
+				class: o.classes.wrapper
+			});
+
+			// Template for custom layouts
+			var inner = [
+				"<div class='", o.classes.top, "'>", o.layout.top, "</div>",
+				"<div class='", o.classes.container, "'></div>",
+				"<div class='", o.classes.bottom, "'>", o.layout.bottom, "</div>"
+			].join("");
+
+			// Info placement
+			inner = inner.replace(
+				"{info}",
+				"<div class='" + o.classes.info + "'></div>"
+			);
+
+			// Per Page Select
+			if (o.perPageSelect) {
+				var wrap = [
+					"<div class='", o.classes.dropdown, "'>",
+					"<label>", o.labels.perPage, "</label>",
+					"</div>"
+				].join("");
+
+				// Create the select
+				var select = createElement("select", {
+					class: o.classes.selector
+				});
+
+				// Create the options
+				each(o.perPageSelect, function(val) {
+					var selected = val === o.perPage;
+					var option = new Option(val, val, selected, selected);
+					select.add(option);
+				});
+
+				// Custom label
+				wrap = wrap.replace("{select}", select.outerHTML);
+
+				// Selector placement
+				inner = inner.replace("{select}", wrap);
+			} else {
+				inner = inner.replace("{select}", "");
+			}
+
+			// Searchable
+			if (o.searchable) {
+				var form = [
+					"<div class='", o.classes.search, "'>",
+					"<input class='", o.classes.input, "' placeholder='", o.labels.placeholder, "' type='text'>",
+					"</div>"
+				].join("");
+
+				// Search input placement
+				inner = inner.replace("{search}", form);
+			} else {
+				inner = inner.replace("{search}", "");
+			}
+
+			// Add table class
+			that.table.node.classList.add(o.classes.table);
+
+			// Pagers
+			each(inner.match(/\{pager\}/g), function(pager, i) {
+				inner = inner.replace(
+					"{pager}",
+					createElement("div", {
+						class: o.classes.pagination
+					}).outerHTML
+				);
+			});
+
+			that.wrapper.innerHTML = inner;
+
+			that.pagers = [].slice.call(
+				that.wrapper.querySelectorAll("." + o.classes.pagination)
+			);
+
+			each(that.pagers, function(pager, i) {
+				that.pagers[i] = new Pager(that, pager);
+			});
+
+			that.container = that.wrapper.querySelector("." + o.classes.container);
+
+			that.labels = that.wrapper.querySelectorAll("." + o.classes.info);
+
+			// Insert in to DOM tree
+			that.table.node.parentNode.replaceChild(that.wrapper, that.table.node);
+			that.container.appendChild(that.table.node);
+
+			// Store the table dimensions
+			that.rect = that.table.node.getBoundingClientRect();
+
+			that.rendered = true;
+		},
+
+		update: function() {
+			this.rows().paginate();
+			this.rows().render();
+
+			this.emit("datatable.update");
+		},
+
+		getInfo: function() {
+			// Update the info
+			var current = 0,
+				f = 0,
+				t = 0,
+				items;
+
+			if (this.totalPages) {
+				current = this.currentPage - 1;
+				f = current * this.config.perPage;
+				t = f + this.pages[current].length;
+				f = f + 1;
+				items = !!this.searching ? this.searchData.length : this.table.rows.length;
+			}
+
+			if (this.labels.length && this.config.labels.info.length) {
+				// CUSTOM LABELS
+				var string = this.config.labels.info
+					.replace("{start}", f)
+					.replace("{end}", t)
+					.replace("{page}", this.currentPage)
+					.replace("{pages}", this.totalPages)
+					.replace("{rows}", items);
+
+				each([].slice.call(this.labels), function(label) {
+					label.innerHTML = items ? string : "";
+				});
+			}
+		},
+
+		search: function(query, column) {
+			var that = this;
+
+			query = query.toLowerCase();
+
+			that.currentPage = 1;
+			that.searching = true;
+			that.searchData = [];
+
+			if (!query.length) {
+				that.searching = false;
+				classList.remove(that.wrapper, "search-results");
+				that.update();
+
+				return false;
+			}
+
+			each(that.table.rows, function(row) {
+				var inArray = that.searchData.indexOf(row) > -1;
+
+				// Filter column
+				if (column !== undefined) {
+					each(row.cells, function(cell) {
+						if (column !== undefined && cell.index == column && !inArray) {
+							if (cell.content.toLowerCase().indexOf(query) >= 0) {
+								that.searchData.push(row);
+							}
 						}
 					});
-				}
-			} else if (options.type === "json") {
-				var json = isJson(options.data);
+				} else {
+					// https://github.com/Mobius1/Vanilla-DataTables/issues/12
+					var match = query.split(" ").reduce(function(bool, word) {
+						var includes = false;
 
-				// Valid JSON string
-				if (json) {
+						for (var x = 0; x < row.cells.length; x++) {
+							if (row.cells[x].content.toLowerCase().indexOf(word) > -1) {
+								if (!row.cells[x].hidden ||
+									(row.cells[x].hidden && that.config.search.includeHiddenColumns)
+								)
+									includes = true;
+								break;
+							}
+						}
+
+						return bool && includes;
+					}, true);
+
+					if (match && !inArray) {
+						that.searchData.push(row);
+					}
+				}
+			});
+
+			classList.add(that.wrapper, "search-results");
+
+			if (!that.searchData.length) {
+				classList.remove(that.wrapper, "search-results");
+
+				that.setMessage(that.config.labels.noRows);
+			} else {
+				that.update();
+			}
+
+			this.emit("datatable.search", query, this.searchData);
+		},
+
+		page: function(page) {
+			// We don't want to load the current page again.
+			if (page == this.currentPage) {
+				return false;
+			}
+
+			if (!isNaN(page)) {
+				this.currentPage = parseInt(page, 10);
+			}
+
+			this.onFirstPage = this.currentPage === 1;
+			this.onLastPage = this.currentPage === this.totalPages;
+
+			if (page > this.totalPages || page < 0) {
+				return false;
+			}
+
+			this.rows().render(page);
+
+			this.emit("datatable.page", page);
+		},
+
+		import: function(options) {
+			var that = this,
+				obj = false;
+			var defaults = {
+				// csv
+				lineDelimiter: "\n",
+				columnDelimiter: ","
+			};
+
+			// Check for the options object
+			if (!isObject(options)) {
+				return false;
+			}
+
+			options = extend(defaults, options);
+
+			if (options.data.length || isObject(options.data)) {
+				// Import CSV
+				if (options.type === "csv") {
 					obj = {
-						headings: [],
 						data: []
 					};
 
-					each(json, function(data, i) {
-						obj.data[i] = [];
-						each(data, function(value, column) {
-							if (obj.headings.indexOf(column) < 0) {
-								obj.headings.push(column);
-							}
+					// Split the string into rows
+					var rows = options.data.split(options.lineDelimiter);
 
-							obj.data[i].push(value);
+					if (rows.length) {
+
+						if (options.headings) {
+							obj.headings = rows[0].split(options.columnDelimiter);
+
+							rows.shift();
+						}
+
+						each(rows, function(row, i) {
+							obj.data[i] = [];
+
+							// Split the rows into values
+							var values = row.split(options.columnDelimiter);
+
+							if (values.length) {
+								each(values, function(value) {
+									obj.data[i].push(value);
+								});
+							}
 						});
+					}
+				} else if (options.type === "json") {
+					var json = isJson(options.data);
+
+					// Valid JSON string
+					if (json) {
+						obj = {
+							headings: [],
+							data: []
+						};
+
+						each(json, function(data, i) {
+							obj.data[i] = [];
+							each(data, function(value, column) {
+								if (obj.headings.indexOf(column) < 0) {
+									obj.headings.push(column);
+								}
+
+								obj.data[i].push(value);
+							});
+						});
+					} else {
+						console.warn("That's not valid JSON!");
+					}
+				}
+
+				if (isObject(options.data)) {
+					obj = options.data;
+				}
+
+				if (obj) {
+					each(obj.headings, function(heading, i) {
+						that.table.header.cells[i].setContent(heading);
 					});
-				} else {
-					console.warn("That's not valid JSON!");
+
+					this.rows().add(obj.data);
 				}
 			}
 
-			if (isObject(options.data)) {
-				obj = options.data;
+			return false;
+		},
+
+		setMessage: function(message) {
+			var colspan = 1;
+
+			if (this.table.rows.length) {
+				colspan = this.table.rows[0].cells.length;
 			}
 
-			if (obj) {
-				each(obj.headings, function(heading, i) {
-					that.table.header.cells[i].setContent(heading);
-				});
+			var node = createElement("tr", {
+				html: '<td class="dataTables-empty" colspan="' +
+					colspan +
+					'">' +
+					message +
+					"</td>"
+			});
 
-				this.rows().add(obj.data);
+			empty(this.table.body);
+
+			this.table.body.appendChild(node);
+		},
+
+		columns: function() {
+			return new Columns(this);
+		},
+
+		rows: function() {
+			return new Rows(this);
+		},
+
+		on: function(event, callback) {
+			this.events = this.events || {};
+			this.events[event] = this.events[event] || [];
+			this.events[event].push(callback);
+		},
+
+		off: function(event, callback) {
+			this.events = this.events || {};
+			if (event in this.events === false) return;
+			this.events[event].splice(this.events[event].indexOf(callback), 1);
+		},
+
+		emit: function(event) {
+			this.events = this.events || {};
+			if (event in this.events === false) return;
+			for (var i = 0; i < this.events[event].length; i++) {
+				this.events[event][i].apply(this, Array.prototype.slice.call(arguments, 1));
 			}
-		}
+		},
 
-		return false;
-	};
+		destroy: function() {
 
-	DataTable.prototype.setMessage = function(message) {
-		var colspan = 1;
+			var that = this,
+				o = that.config,
+				table = that.table;
 
-		if (this.table.rows.length) {
-			colspan = this.table.rows[0].cells.length;
-		}
+			classList.remove(table.node, o.classes.table);
 
-		var node = createElement("tr", {
-			html: '<td class="dataTables-empty" colspan="' +
-				colspan +
-				'">' +
-				message +
-				"</td>"
-		});
+			each(table.header.cells, function(cell) {
+				cell.node.style.width = "";
+				classList.remove(cell.node, o.classes.sorter);
+			});
 
-		empty(this.table.body);
+			var frag = doc.createDocumentFragment();
+			empty(table.body);
 
-		this.table.body.appendChild(node);
-	};
+			each(table.rows, function(row) {
+				frag.appendChild(row.node);
+			});
 
-	DataTable.prototype.columns = function() {
-		return new Columns(this);
-	};
+			table.body.appendChild(frag);
 
-	DataTable.prototype.rows = function() {
-		return new Rows(this);
-	};
+			this.wrapper.parentNode.replaceChild(table.node, this.wrapper);
 
-	DataTable.prototype.on = function(event, callback) {
-		this.events = this.events || {};
-		this.events[event] = this.events[event] || [];
-		this.events[event].push(callback);
-	};
-
-	DataTable.prototype.off = function(event, callback) {
-		this.events = this.events || {};
-		if (event in this.events === false) return;
-		this.events[event].splice(this.events[event].indexOf(callback), 1);
-	};
-
-	DataTable.prototype.emit = function(event) {
-		this.events = this.events || {};
-		if (event in this.events === false) return;
-		for (var i = 0; i < this.events[event].length; i++) {
-			this.events[event][i].apply(this, Array.prototype.slice.call(arguments, 1));
+			this.rendered = false;
+			this.initialised = false;
 		}
 	};
 
@@ -1695,34 +1595,6 @@
 		} else {
 			DataTable[prop] = val;
 		}
-	};
-
-	DataTable.prototype.destroy = function() {
-
-		var that = this,
-			o = that.config,
-			table = that.table;
-
-		classList.remove(table.node, o.classes.table);
-
-		each(table.header.cells, function(cell) {
-			cell.node.style.width = "";
-			classList.remove(cell.node, o.classes.sorter);
-		});
-
-		var frag = doc.createDocumentFragment();
-		empty(table.body);
-
-		each(table.rows, function(row) {
-			frag.appendChild(row.node);
-		});
-
-		table.body.appendChild(frag);
-
-		this.wrapper.parentNode.replaceChild(table.node, this.wrapper);
-
-		this.rendered = false;
-		this.initialised = false;
 	};
 
 	return DataTable;
