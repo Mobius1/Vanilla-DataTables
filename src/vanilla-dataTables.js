@@ -4,7 +4,7 @@
  * Copyright (c) 2015-2017 Karl Saunders (http://mobius.ovh)
  * Licensed under MIT (http://www.opensource.org/licenses/mit-license.php)
  *
- * Version: 2.0.0-alpha.19
+ * Version: 2.0.0-alpha.20
  *
  */
 (function(root, factory) {
@@ -277,7 +277,7 @@
      * @param  {String} format      The format for moment to use
      * @return {String|Boolean}     Datatime string or false
      */
-    var parseDate = function(content, format) {
+    var parseDate = function(content, format, cell, row) {
         var date = false;
 
         // moment() throws a fit if the string isn't a valid datetime string
@@ -305,7 +305,7 @@
                     break;
             }
         } else {
-            date = new Date(content).getTime();
+            date = new Date(content).getTime()
         }
 
         return date;
@@ -783,21 +783,21 @@
             }
 
             rows.sort(function(a, b) {
-                a = a.cells[column].content;
-                b = b.cells[column].content;
+                var ca = a.cells[column].content;
+                var cb = b.cells[column].content;
 
                 if (datetime) {
-                    a = parseDate(a, format);
-                    b = parseDate(b, format);
+                    ca = parseDate(ca, format, a.cells[column], a);
+                    cb = parseDate(cb, format, b.cells[column], b);
                 } else {
-                    a = a.replace(/(\$|\,|\s|%)/g, "");
-                    b = b.replace(/(\$|\,|\s|%)/g, "");
+                    ca = ca.replace(/(\$|\,|\s|%)/g, "");
+                    cb = cb.replace(/(\$|\,|\s|%)/g, "");
                 }
 
-                a = !isNaN(a) ? parseInt(a, 10) : a;
-                b = !isNaN(b) ? parseInt(b, 10) : b;
+                ca = !isNaN(ca) ? parseInt(ca, 10) : ca;
+                cb = !isNaN(cb) ? parseInt(cb, 10) : cb;
 
-                return direction === "asc" ? a > b : a < b;
+                return direction === "asc" ? ca > cb : ca < cb;
             });
 
             dt.table.update();
@@ -820,7 +820,15 @@
                 head = dt.table.header,
                 rows = dt.table.rows,
                 arr;
+
             if (isArray(order)) {
+                // Check for erroneous indexes
+                for (var n = 0; n < order.length; n++) {
+                    if (order[n] >= head.cells.length) {
+                        throw new Error("Column index " + order[n] + " is outside the range of columns.");
+                    }
+                }
+
                 // Reorder the header
                 if (dt.table.hasHeader) {
                     arr = [];
@@ -1096,6 +1104,11 @@
             that.onFirstPage = true;
             that.onLastPage = false;
 
+            that.API = {
+                rows: new Rows(that),
+                columns: new Columns(that)
+            };
+
             that.rows().paginate();
             that.totalPages = that.pages.length;
 
@@ -1181,9 +1194,9 @@
                 if (that.selectedColumns.length) {
                     each(that.table.rows, function(row) {
                         each(row.cells, function(cell) {
-                            if (that.selectedColumns.indexOf(cell.index) > -1) {
+                            if (that.selectedColumns.indexOf(cell.index) >= 0) {
                                 each(that.columnRenderers, function(obj) {
-                                    if (obj.columns.indexOf(cell.index) > -1) {
+                                    if (obj.columns.indexOf(cell.index) >= 0) {
                                         cell.setContent(obj.renderer.call(that, cell.content, cell, row));
                                     }
                                 });
@@ -1468,7 +1481,7 @@
             }
 
             each(that.table.rows, function(row) {
-                var inArray = that.searchData.indexOf(row) > -1;
+                var inArray = that.searchData.indexOf(row) >= 0;
 
                 // Filter column
                 if (column !== undefined) {
@@ -1485,7 +1498,7 @@
                         var includes = false;
 
                         for (var x = 0; x < row.cells.length; x++) {
-                            if (row.cells[x].content.toLowerCase().indexOf(word) > -1) {
+                            if (row.cells[x].content.toLowerCase().indexOf(word) >= 0) {
                                 if (!row.cells[x].hidden ||
                                     (row.cells[x].hidden && that.config.search.includeHiddenColumns)
                                 )
@@ -1647,11 +1660,11 @@
         },
 
         columns: function() {
-            return new Columns(this);
+            return this.API.columns;
         },
 
         rows: function() {
-            return new Rows(this);
+            return this.API.rows;
         },
 
         on: function(event, callback) {
