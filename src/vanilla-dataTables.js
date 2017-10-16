@@ -4,7 +4,7 @@
  * Copyright (c) 2015-2017 Karl Saunders (http://mobius.ovh)
  * Licensed under MIT (http://www.opensource.org/licenses/mit-license.php)
  *
- * Version: 2.0.0-alpha.18
+ * Version: 2.0.0-alpha.19
  *
  */
 (function(root, factory) {
@@ -58,19 +58,19 @@
         },
 
         classes: {
-            table: "dataTable-table",
-            wrapper: "dataTable-wrapper",
-            container: "dataTable-container",
-            top: "dataTable-top",
-            bottom: "dataTable-bottom",
-            info: "dataTable-info",
-            dropdown: "dataTable-dropdown",
-            selector: "dataTable-selector",
-            pagination: "dataTable-pagination",
-            input: "dataTable-input",
-            search: "dataTable-search",
-            ellipsis: "dataTable-ellipsis",
-            sorter: "dataTable-sorter",
+            top: "dt-top",
+            info: "dt-info",
+            input: "dt-input",
+            table: "dt-table",
+            bottom: "dt-bottom",
+            search: "dt-search",
+            sorter: "dt-sorter",
+            wrapper: "dt-wrapper",
+            dropdown: "dt-dropdown",
+            ellipsis: "dt-ellipsis",
+            selector: "dt-selector",
+            container: "dt-container",
+            pagination: "dt-pagination"
         },
 
         // Customise the display text
@@ -1105,6 +1105,8 @@
                 that.columns().fix();
             }
 
+            that.initExtensions();
+
             if (o.plugins) {
                 each(o.plugins, function(options, plugin) {
                     if (that[plugin] !== undefined && typeof that[plugin] === "function") {
@@ -1200,6 +1202,32 @@
             setTimeout(function() {
                 that.emit("init");
             }, 10);
+        },
+
+        initExtensions: function() {
+            var that = this;
+            var extensions = [
+                "editable",
+                "exportable",
+                "filterable"
+            ];
+
+            each(extensions, function(extension) {
+                if (that[extension] !== undefined && typeof that[extension] === "function") {
+                    that[extension] = that[extension](that, that.config[extension], {
+                        each: each,
+                        extend: extend,
+                        isObject: isObject,
+                        classList: classList,
+                        createElement: createElement
+                    });
+
+                    // Init extension
+                    if (that[extension].init && typeof that[extension].init === "function") {
+                        that[extension].init();
+                    }
+                }
+            });
         },
 
         bindEvents: function() {
