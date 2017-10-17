@@ -4,7 +4,7 @@
  * Copyright (c) 2015-2017 Karl Saunders (http://mobius.ovh)
  * Licensed under MIT (http://www.opensource.org/licenses/mit-license.php)
  *
- * Version: 2.0.0-alpha.20
+ * Version: 2.0.0-alpha.21
  *
  */
 (function(root, factory) {
@@ -21,7 +21,9 @@
     "use strict";
     var win = window,
         doc = document,
-        body = doc.body;
+        body = doc.body,
+        supports = "classList" in body,
+        IE = !!/(msie|trident)/i.test(navigator.userAgent);
 
     /**
      * Default configuration
@@ -42,8 +44,6 @@
         firstText: "&laquo;",
         lastText: "&raquo;",
         ellipsisText: "&hellip;",
-        ascText: "▴",
-        descText: "▾",
         truncatePager: true,
         pagerDelta: 2,
 
@@ -153,7 +153,6 @@
      */
     var each = function(arr, fn, scope) {
         var n;
-
         if (isObject(arr)) {
             for (n in arr) {
                 if (Object.prototype.hasOwnProperty.call(arr, n)) {
@@ -186,7 +185,7 @@
                     node.innerHTML = options[prop];
                 } else {
                     if (prop in node) {
-                        node[prop] = options[prop]
+                        node[prop] = options[prop];
                     } else {
                         node.setAttribute(prop, options[prop]);
                     }
@@ -203,7 +202,7 @@
      * @return {Object|Boolean}      Returns the matching ancestor or false in not found.
      */
     var closest = function(el, fn) {
-        return el && el !== document.body && (fn(el) ? el : closest(el.parentNode, fn));
+        return el && el !== body && (fn(el) ? el : closest(el.parentNode, fn));
     };
 
     /**
@@ -217,17 +216,11 @@
     };
 
     /**
-     * Remove event listener from target
-     * @param  {Object} el
-     * @param  {String} e
-     * @param  {Function} fn
+     * Empty a node
+     * @param  {Object} el HTMLElement
      */
-    var off = function(el, e, fn) {
-        el.removeEventListener(e, fn);
-    };
-
-    var empty = function(el, ie) {
-        if (ie) {
+    var empty = function(el) {
+        if (IE) {
             while (el.hasChildNodes()) {
                 el.removeChild(el.lastChild);
             }
@@ -242,7 +235,7 @@
      */
     var classList = {
         add: function(s, a) {
-            if (s.classList) {
+            if (supports) {
                 s.classList.add(a);
             } else {
                 if (!classList.contains(s, a)) {
@@ -251,28 +244,27 @@
             }
         },
         remove: function(s, a) {
-            if (s.classList) {
+            if (supports) {
                 s.classList.remove(a);
             } else {
                 if (classList.contains(s, a)) {
-                    s.className = s.className.replace(
-                        new RegExp("(^|\\s)" + a.split(" ").join("|") + "(\\s|$)", "gi"),
-                        " "
-                    );
+                    s.className = s.className.replace(new RegExp("(^|\\s)" + a.split(" ").join("|") + "(\\s|$)", "gi"), " ");
                 }
             }
         },
         contains: function(s, a) {
-            if (s)
-                return s.classList ?
-                    s.classList.contains(a) :
-                    !!s.className &&
-                    !!s.className.match(new RegExp("(\\s|^)" + a + "(\\s|$)"));
+            return supports ? s.classList.contains(a) : !!s.className && !!s.className.match(new RegExp("(\\s|^)" + a + "(\\s|$)"));
+        },
+        toggle: function(t, n, force) {
+            n += "";
+            var i = this.contains(t, n),
+                o = i ? true !== force && "remove" : false !== force && "add";
+            return o && this[o](t, n), true === force || false === force ? force : !i;
         }
     };
 
     /**
-     * Use moment.js to parse cell contents for sorting
+     * Parse cell contents for sorting
      * @param  {String} content     The datetime string to parse
      * @param  {String} format      The format for moment to use
      * @return {String|Boolean}     Datatime string or false
@@ -280,12 +272,13 @@
     var parseDate = function(content, format, cell, row) {
         var date = false;
 
-        // moment() throws a fit if the string isn't a valid datetime string
-        // so we need to supply the format to the constructor (https://momentjs.com/docs/#/parsing/string-format/)
-
-        // Converting to YYYYMMDD ensures we can accurately sort the column numerically
-
         if (format && win.moment) {
+
+            // moment() throws a fit if the string isn't a valid datetime string
+            // so we need to supply the format to the constructor (https://momentjs.com/docs/#/parsing/string-format/)
+
+            // Converting to YYYYMMDD ensures we can accurately sort the column numerically                 
+
             switch (format) {
                 case "ISO_8601":
                     date = moment(content, moment.ISO_8601).format("YYYYMMDD");
@@ -305,7 +298,7 @@
                     break;
             }
         } else {
-            date = new Date(content).getTime()
+            date = new Date(content).getTime();
         }
 
         return date;
@@ -331,7 +324,7 @@
             each(row, function(val, i) {
                 this.node.appendChild(createElement("td", {
                     html: val
-                }))
+                }));
             }, this);
         } else {
             this.node = row;
@@ -349,11 +342,11 @@
         }, this);
     };
 
-    var Table = function(table, data, instance) {
+    var Table = function(table, data, dt) {
         this.node = table;
 
         if (typeof table === "string") {
-            this.node = document.querySelector(table);
+            this.node = doc.querySelector(table);
         }
 
         if (data) {
@@ -381,18 +374,37 @@
 
                 this.rows.shift();
 
-                if (instance.config.sortable) {
+                if (dt.config.sortable) {
                     each(this.header.cells, function(cell) {
-                        classList.add(cell.node, instance.config.classes.sorter);
+                        classList.add(cell.node, dt.config.classes.sorter);
                     });
                 }
             } else {
                 this.addHeader();
             }
         }
+
+        if (!dt.config.header) {
+            this.head.removeChild(this.header.node);
+        }
+
+        if (dt.config.footer) {
+            this.hasFooter = true;
+            this.footer = new Row(this.header.node.cloneNode(true));
+
+            var foot = createElement("tfoot");
+            foot.appendChild(this.footer.node);
+
+            each(this.footer.cells, function(cell) {
+                classList.remove(cell.node, dt.config.classes.sorter);
+            });
+
+            this.node.insertBefore(foot, this.body);
+        }
     };
 
     Table.prototype = {
+
         build: function(data) {
             var thead = false,
                 tbody = false;
@@ -502,8 +514,9 @@
 
             pages = pages || dt.totalPages;
 
-            empty(that.parent, that.isIE);
+            empty(that.parent);
 
+            // No need for pager if we only have one page
             if (pages > 1) {
                 var c = "pager",
                     ul = createElement("ul"),
@@ -603,6 +616,12 @@
     };
 
     Rows.prototype = {
+        init: function() {},
+
+        count: function() {
+            return this.instance.table.rows.length;
+        },
+
         render: function(page) {
             var that = this,
                 dt = that.instance;
@@ -612,9 +631,8 @@
 
             if (page < 1 || page > dt.totalPages) return;
 
-            var that = this,
-                head = dt.table.header,
-                fragment = document.createDocumentFragment();
+            var head = dt.table.header,
+                fragment = doc.createDocumentFragment();
 
             if (dt.table.hasHeader) {
                 empty(head.node);
@@ -680,13 +698,13 @@
                 at = at || 0;
                 if (isArray(row[0])) {
                     each(row, function(tr) {
-                        tr = this.instance.table.addRow(new Row(tr, this.instance.table.rows.length + 1), at);
+                        tr = this.instance.table.addRow(new Row(tr, this.instance.columns().count() + 1), at);
                     }, this);
                     // only update after adding multiple rows
                     // to keep performance hit to a minimum
                     this.instance.table.update();
                 } else {
-                    row = this.instance.table.addRow(new Row(row, this.instance.table.rows.length + 1), at, true);
+                    row = this.instance.table.addRow(new Row(row, this.instance.columns().count() + 1), at, true);
                 }
 
                 this.instance.update();
@@ -707,7 +725,8 @@
                 dt.table.update();
                 dt.update();
             } else {
-                if (row = this.get(obj)) {
+                row = this.get(obj);
+                if (row) {
                     dt.table.removeRow(row, true);
                     dt.update();
 
@@ -739,6 +758,12 @@
     };
 
     Columns.prototype = {
+        init: function() {},
+
+        count: function() {
+            return this.instance.table.header.cells.length;
+        },
+
         sort: function(column, direction) {
 
             var dt = this.instance;
@@ -816,44 +841,39 @@
         },
 
         order: function(order) {
-            var dt = this.instance,
-                head = dt.table.header,
-                rows = dt.table.rows,
-                arr;
+            var dt = this.instance;
 
             if (isArray(order)) {
                 // Check for erroneous indexes
                 for (var n = 0; n < order.length; n++) {
-                    if (order[n] >= head.cells.length) {
+                    if (order[n] >= dt.columns().count()) {
                         throw new Error("Column index " + order[n] + " is outside the range of columns.");
                     }
                 }
 
+                var reorder = function(node) {
+                    var arr = [];
+                    each(order, function(column, i) {
+                        arr[i] = node.cells[column];
+                        arr[i].index = arr[i].node.dataIndex = i;
+                        node.node.appendChild(arr[i].node);
+                    });
+                    node.cells = arr;
+                };
+
                 // Reorder the header
                 if (dt.table.hasHeader) {
-                    arr = [];
-                    each(order, function(column, i) {
-                        arr[i] = head.cells[column];
-
-                        arr[i].index = arr[i].node.dataIndex = i;
-
-                        // rearrange the tr node cells for rendering
-                        head.node.appendChild(arr[i].node);
-                    });
-                    head.cells = arr;
+                    reorder(dt.table.header);
                 }
 
-                // Reorder the body
-                each(rows, function(row) {
-                    arr = [];
-                    each(order, function(column, i) {
-                        arr[i] = row.cells[column];
+                // Reorder the footer
+                if (dt.table.hasFooter) {
+                    reorder(dt.table.footer);
+                }
 
-                        arr[i].index = arr[i].node.dataIndex = i;
-
-                        row.node.appendChild(arr[i].node);
-                    });
-                    row.cells = arr;
+                // Reorder the rows
+                each(dt.table.rows, function(row) {
+                    reorder(row);
                 });
 
                 dt.update();
@@ -863,8 +883,7 @@
         },
 
         hide: function(columns) {
-            var that = this,
-                dt = this.instance,
+            var dt = this.instance,
                 head = dt.table.header,
                 rows = dt.table.rows;
 
@@ -872,21 +891,21 @@
                 columns = [columns];
             }
 
-            for (var n = 0; n < columns.length; n++) {
+            each(columns, function(column) {
                 each(head.cells, function(cell) {
-                    if (columns[n] == cell.index) {
+                    if (column == cell.index) {
                         cell.hidden = true;
                     }
                 });
 
                 each(rows, function(row) {
                     each(row.cells, function(cell) {
-                        if (columns[n] == cell.index) {
+                        if (column == cell.index) {
                             cell.hidden = true;
                         }
                     });
                 });
-            }
+            });
 
             this.fix(true);
             dt.update();
@@ -895,8 +914,7 @@
         },
 
         show: function(columns) {
-            var that = this,
-                dt = this.instance,
+            var dt = this.instance,
                 head = dt.table.header,
                 rows = dt.table.rows;
 
@@ -904,21 +922,21 @@
                 columns = [columns];
             }
 
-            for (var n = 0; n < columns.length; n++) {
+            each(columns, function(column) {
                 each(head.cells, function(cell) {
-                    if (columns[n] == cell.index) {
+                    if (column == cell.index) {
                         cell.hidden = false;
                     }
                 });
 
                 each(rows, function(row) {
                     each(row.cells, function(cell) {
-                        if (columns[n] == cell.index) {
+                        if (column == cell.index) {
                             cell.hidden = false;
                         }
                     });
                 });
-            }
+            });
 
             this.fix(true);
             dt.update();
@@ -927,8 +945,7 @@
         },
 
         visible: function(columns) {
-            var that = this,
-                dt = this.instance,
+            var dt = this.instance,
                 head = dt.table.header,
                 cols;
 
@@ -955,7 +972,7 @@
 
             if (isObject(obj)) {
                 if (isset(obj, "heading")) {
-                    var cell = new Cell(createElement("th"), dt.table.header.cells.length);
+                    var cell = new Cell(createElement("th"), dt.columns().count());
                     cell.setContent(obj.heading);
 
                     dt.table.header.node.appendChild(cell.node);
@@ -1035,20 +1052,20 @@
                 }
             }
 
-            each(
-                dt.columnWidths,
-                function(size, cell) {
-                    var w = size / dt.rect.width * 100;
-                    head.cells[cell].node.style.width = w + "%";
-                },
-                this
-            );
+            each(dt.columnWidths, function(size, cell) {
+                head.cells[cell].node.style.width = (size / dt.rect.width * 100) + "%";
+            });
         }
     };
 
     // MAIN LIB
     var DataTable = function(table, config) {
         this.config = extend(defaultConfig, config);
+
+        this.API = {
+            rows: new Rows(this),
+            columns: new Columns(this)
+        };
 
         if (this.config.ajax) {
             var that = this,
@@ -1097,17 +1114,9 @@
             var that = this,
                 o = that.config;
 
-            // IE detection
-            that.isIE = !!/(msie|trident)/i.test(navigator.userAgent);
-
             that.currentPage = 1;
             that.onFirstPage = true;
             that.onLastPage = false;
-
-            that.API = {
-                rows: new Rows(that),
-                columns: new Columns(that)
-            };
 
             that.rows().paginate();
             that.totalPages = that.pages.length;
@@ -1213,6 +1222,8 @@
             that.initialised = true;
 
             setTimeout(function() {
+                that.API.rows.init();
+                that.API.columns.init();
                 that.emit("init");
             }, 10);
         },
@@ -1261,7 +1272,7 @@
                     that.page(parseInt(node.getAttribute("data-page"), 10));
                 }
 
-                if (o.sortable && node.nodeName === "TH") {
+                if (o.sortable && node.nodeName === "TH" && classList.contains(node, o.classes.sorter)) {
                     if (node.hasAttribute("data-sortable") && node.getAttribute("data-sortable") === "false") return false;
 
                     e.preventDefault();
@@ -1320,7 +1331,7 @@
             var that = this,
                 o = that.config;
 
-            if (this.table.hasHeader && o.fixedColumns) {
+            if (this.table.hasHeader && o.fixedColumns && o.header) {
                 this.columnWidths = this.table.header.cells.map(function(cell) {
                     return cell.node.offsetWidth;
                 });
@@ -1414,7 +1425,7 @@
 
             that.labels = that.wrapper.querySelectorAll("." + o.classes.info);
 
-            that.selectors = that.wrapper.querySelectorAll("." + o.classes.selector)
+            that.selectors = that.wrapper.querySelectorAll("." + o.classes.selector);
 
             // Insert in to DOM tree
             that.table.node.parentNode.replaceChild(that.wrapper, that.table.node);
@@ -1445,7 +1456,7 @@
                 f = current * this.config.perPage;
                 t = f + this.pages[current].length;
                 f = f + 1;
-                items = !!this.searching ? this.searchData.length : this.table.rows.length;
+                items = !!this.searching ? this.searchData.length : this.rows().count();
             }
 
             if (this.labels.length && this.config.labels.info.length) {
@@ -1619,7 +1630,7 @@
                             });
                         });
                     } else {
-                        console.warn("That's not valid JSON!");
+                        throw new Error("That's not valid JSON!");
                     }
                 }
 
@@ -1642,8 +1653,8 @@
         setMessage: function(message) {
             var colspan = 1;
 
-            if (this.table.rows.length) {
-                colspan = this.table.rows[0].cells.length;
+            if (this.rows().count()) {
+                colspan = this.columns().count();
             }
 
             var node = createElement("tr", {
