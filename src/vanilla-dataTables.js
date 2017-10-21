@@ -4,7 +4,7 @@
  * Copyright (c) 2015-2017 Karl Saunders (http://mobius.ovh)
  * Licensed under MIT (http://www.opensource.org/licenses/mit-license.php)
  *
- * Version: 2.0.0-alpha.21
+ * Version: 2.0.0-alpha.22
  *
  */
 (function(root, factory) {
@@ -1424,6 +1424,7 @@
             that.container = that.wrapper.querySelector("." + o.classes.container);
 
             that.labels = that.wrapper.querySelectorAll("." + o.classes.info);
+            that.inputs = that.wrapper.querySelectorAll("." + o.classes.input);
 
             that.selectors = that.wrapper.querySelectorAll("." + o.classes.selector);
 
@@ -1560,6 +1561,24 @@
             this.rows().render(page);
 
             this.emit("page", page);
+        },
+
+        reset: function() {
+            var that = this;
+
+            if (this.searching) {
+                this.searching = this.searchData = false;
+                classList.remove(this.wrapper, "search-results");
+            }
+
+            each([].slice.call(this.inputs), function(input) {
+                input.value = null;
+                input.blur();
+            });
+
+            this.update();
+
+            this.emit("reset");
         },
 
         import: function(options) {
