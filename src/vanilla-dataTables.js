@@ -4,7 +4,7 @@
  * Copyright (c) 2015-2017 Karl Saunders (http://mobius.ovh)
  * Licensed under MIT (http://www.opensource.org/licenses/mit-license.php)
  *
- * Version: 2.0.0-alpha.22
+ * Version: 2.0.0-beta.1
  *
  */
 (function(root, factory) {
@@ -27,7 +27,7 @@
 
     /**
      * Default configuration
-     * @typ {Object}
+     * @type {Object}
      */
     var defaultConfig = {
         perPage: 10,
@@ -87,6 +87,16 @@
             bottom: "{info}{pager}"
         }
     };
+
+    /**
+     * Default extensions
+     * @type {Array}
+     */
+    var extensions = [
+        "editable",
+        "exportable",
+        "filterable"
+    ];
 
     /**
      * Check is item is object
@@ -261,6 +271,18 @@
                 o = i ? true !== force && "remove" : false !== force && "add";
             return o && this[o](t, n), true === force || false === force ? force : !i;
         }
+    };
+
+    /**
+     * Utils
+     * @type {Object}
+     */
+    var utils = {
+        each: each,
+        extend: extend,
+        isObject: isObject,
+        classList: classList,
+        createElement: createElement
     };
 
     /**
@@ -1127,18 +1149,12 @@
                 that.columns().fix();
             }
 
-            that.initExtensions();
+            that.extend();
 
             if (o.plugins) {
                 each(o.plugins, function(options, plugin) {
                     if (that[plugin] !== undefined && typeof that[plugin] === "function") {
-                        that[plugin] = that[plugin](that, options, {
-                            each: each,
-                            extend: extend,
-                            isObject: isObject,
-                            classList: classList,
-                            createElement: createElement
-                        });
+                        that[plugin] = that[plugin](that, options, utils);
 
                         // Init plugin
                         if (options.enabled && that[plugin].init && typeof that[plugin].init === "function") {
@@ -1150,8 +1166,8 @@
 
             // Check for the columns option
             if (o.columns) {
-                that.selectedColumns = [];
-                that.columnRenderers = [];
+                var selectedColumns = [];
+                var columnRenderers = [];
 
                 each(o.columns, function(data) {
                     // convert single column selection to array
@@ -1160,9 +1176,9 @@
                     }
 
                     if (isset(data, "render") && typeof data.render === "function") {
-                        that.selectedColumns = that.selectedColumns.concat(data.select);
+                        selectedColumns = selectedColumns.concat(data.select);
 
-                        that.columnRenderers.push({
+                        columnRenderers.push({
                             columns: data.select,
                             renderer: data.render
                         });
@@ -1200,11 +1216,11 @@
                     }
                 });
 
-                if (that.selectedColumns.length) {
+                if (selectedColumns.length) {
                     each(that.table.rows, function(row) {
                         each(row.cells, function(cell) {
-                            if (that.selectedColumns.indexOf(cell.index) >= 0) {
-                                each(that.columnRenderers, function(obj) {
+                            if (selectedColumns.indexOf(cell.index) >= 0) {
+                                each(columnRenderers, function(obj) {
                                     if (obj.columns.indexOf(cell.index) >= 0) {
                                         cell.setContent(obj.renderer.call(that, cell.content, cell, row));
                                     }
@@ -1228,27 +1244,16 @@
             }, 10);
         },
 
-        initExtensions: function() {
+        extend: function() {
             var that = this;
-            var extensions = [
-                "editable",
-                "exportable",
-                "filterable"
-            ];
 
-            each(extensions, function(extension) {
-                if (that[extension] !== undefined && typeof that[extension] === "function") {
-                    that[extension] = that[extension](that, that.config[extension], {
-                        each: each,
-                        extend: extend,
-                        isObject: isObject,
-                        classList: classList,
-                        createElement: createElement
-                    });
+            each(extensions, function(ext) {
+                if (that[ext] !== undefined && typeof that[ext] === "function") {
+                    that[ext] = that[ext](that, that.config[ext], utils);
 
                     // Init extension
-                    if (that[extension].init && typeof that[extension].init === "function") {
-                        that[extension].init();
+                    if (that[ext].init && typeof that[ext].init === "function") {
+                        that[ext].init();
                     }
                 }
             });
