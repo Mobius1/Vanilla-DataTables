@@ -4,7 +4,7 @@
  * Copyright (c) 2015-2017 Karl Saunders (http://mobius.ovh)
  * Licensed under MIT (http://www.opensource.org/licenses/mit-license.php)
  *
- * Version: 2.0.0-beta.1
+ * Version: 2.0.0-alpha.23
  *
  */
 (function(root, factory) {
@@ -473,12 +473,15 @@
             }
         },
 
-        addHeader: function() {
-            var th = createElement("thead"),
+        addHeader: function(data, append) {
+            var that = this,
+                th = createElement("thead"),
                 tr = createElement("tr");
 
-            each(this.rows[0].cells, function(cell) {
-                tr.appendChild(createElement("td"));
+            data = data || this.rows[0].cells;
+
+            each(data, function(cell) {
+                tr.appendChild(createElement("th"));
             });
 
             th.appendChild(tr);
@@ -486,6 +489,12 @@
             this.head = th;
             this.header = new Row(tr, 1);
             this.hasHeader = true;
+
+            if (append) {
+                if (!this.node.contains(this.header.node)) {
+                    this.node.insertBefore(th, this.body);
+                }
+            }
         },
 
         addRow: function(row, at, update) {
@@ -633,8 +642,20 @@
     };
 
     // ROWS
-    var Rows = function(instance) {
+    var Rows = function(instance, select) {
         this.instance = instance;
+
+        if (select !== undefined) {
+            if (!isNaN(select)) {
+                this.select = [select];
+            } else if (isArray(select)) {
+                this.select = select;
+            }
+        } else {
+            this.select = instance.table.rows.map(function(row) {
+                return row.index;
+            });
+        }
     };
 
     Rows.prototype = {
@@ -686,6 +707,10 @@
             });
 
             dt.getInfo();
+
+            if (dt.currentPage == 1) {
+                dt.fixHeight();
+            }
 
             dt.emit("rows.render");
         },
@@ -757,6 +782,23 @@
             }
         },
 
+        cells: function() {
+            var that = this,
+                rows = [];
+
+            if (this.select.length == 1) {
+                this.select = this.select[0];
+            }
+
+            each(this.instance.table.rows, function(row) {
+                if ((isArray(that.select) && that.select.indexOf(row.index) >= 0) || that.select == row.index) {
+                    rows.push(row.cells);
+                }
+            });
+
+            return rows;
+        },
+
         get: function(row) {
             var rows = this.instance.table.rows;
             if (row instanceof Row || row instanceof Element) {
@@ -775,12 +817,110 @@
     };
 
     // COLUMNS
-    var Columns = function(instance) {
+    var Columns = function(instance, select) {
         this.instance = instance;
+
+        if (select !== undefined) {
+            if (!isNaN(select)) {
+                this.select = [select];
+            } else if (isArray(select)) {
+                this.select = select;
+            }
+        } else {
+            if (instance.table.hasheader) {
+                this.select = instance.table.header.cells.map(function(cell) {
+                    return cell.index;
+                });
+            }
+        }
     };
 
     Columns.prototype = {
-        init: function() {},
+        init: function() {
+            var that = this.instance,
+                o = that.config;
+
+            if (that.table.hasHeader) {
+                each(that.table.header.cells, function(cell) {
+                    classList.add(cell.node, o.classes.sorter);
+                });
+            }
+
+            if (o.columns) {
+                var selectedColumns = [];
+                var columnRenderers = [];
+
+                each(o.columns, function(data) {
+                    // convert single column selection to array
+                    if (!isNaN(data.select)) {
+                        data.select = [data.select];
+                    }
+
+                    if (isset(data, "render") && typeof data.render === "function") {
+                        selectedColumns = selectedColumns.concat(data.select);
+
+                        columnRenderers.push({
+                            columns: data.select,
+                            renderer: data.render
+                        });
+                    }
+
+                    // Add the data attributes to the th elements
+                    if (that.table.hasHeader) {
+
+                        each(that.table.header.cells, function(cell) {
+                            classList.add(cell.node, o.classes.sorter);
+                        });
+
+                        each(data.select, function(column) {
+                            var cell = that.table.header.cells[column];
+
+                            if (data.type) {
+                                cell.node.setAttribute("data-type", data.type);
+                            }
+                            if (data.format) {
+                                cell.node.setAttribute("data-format", data.format);
+                            }
+                            if (isset(data, "sortable")) {
+                                cell.node.setAttribute("data-sortable", data.sortable);
+
+                                if (data.sortable === false) {
+                                    classList.remove(cell.node, o.classes.sorter);
+                                }
+                            }
+
+                            if (isset(data, "hidden")) {
+                                if (data.hidden !== false) {
+                                    that.columns().hide(column);
+                                }
+                            }
+
+                            if (isset(data, "sort") && data.select.length === 1) {
+                                that.columns().sort(data.select[0], data.sort);
+                            }
+                        });
+                    }
+                });
+
+                if (selectedColumns.length) {
+                    each(that.table.rows, function(row) {
+                        each(row.cells, function(cell) {
+                            if (selectedColumns.indexOf(cell.index) >= 0) {
+                                each(columnRenderers, function(obj) {
+                                    if (obj.columns.indexOf(cell.index) >= 0) {
+                                        cell.setContent(obj.renderer.call(that, cell.content, cell, row));
+                                    }
+                                })
+                            }
+                        });
+                    });
+                }
+            }
+
+            if (o.fixedColumns && that.table.hasHeader) {
+                this.fix(true);
+            }
+        },
 
         count: function() {
             return this.instance.table.header.cells.length;
@@ -858,7 +998,7 @@
             classList.remove(node, "loading");
         },
 
-        filter: function(column, query) {
+        search: function(column, query) {
             this.instance.search(query, column);
         },
 
@@ -904,16 +1044,12 @@
             }
         },
 
-        hide: function(columns) {
+        hide: function() {
             var dt = this.instance,
                 head = dt.table.header,
                 rows = dt.table.rows;
 
-            if (!isNaN(columns)) {
-                columns = [columns];
-            }
-
-            each(columns, function(column) {
+            each(this.select, function(column) {
                 each(head.cells, function(cell) {
                     if (column == cell.index) {
                         cell.hidden = true;
@@ -932,19 +1068,15 @@
             this.fix(true);
             dt.update();
 
-            dt.emit("columns.hide", columns);
+            dt.emit("columns.hide", this.select);
         },
 
-        show: function(columns) {
+        show: function() {
             var dt = this.instance,
                 head = dt.table.header,
                 rows = dt.table.rows;
 
-            if (!isNaN(columns)) {
-                columns = [columns];
-            }
-
-            each(columns, function(column) {
+            each(this.select, function(column) {
                 each(head.cells, function(cell) {
                     if (column == cell.index) {
                         cell.hidden = false;
@@ -963,28 +1095,17 @@
             this.fix(true);
             dt.update();
 
-            dt.emit("columns.show", columns);
+            dt.emit("columns.show", this.select);
         },
 
-        visible: function(columns) {
+        visible: function() {
             var dt = this.instance,
                 head = dt.table.header,
-                cols;
-
-            if (columns === undefined) {
-                columns = head.cells.map(function(cell) {
-                    return cell.index;
-                });
-            }
-
-            if (!isNaN(columns)) {
-                cols = !head.cells[columns].hidden;
-            } else if (isArray(columns)) {
                 cols = [];
-                each(columns, function(column) {
-                    cols.push(!head.cells[column].hidden);
-                });
-            }
+
+            each(this.select, function(column) {
+                cols.push(!head.cells[column].hidden);
+            });
 
             return cols;
         },
@@ -1077,6 +1198,30 @@
             each(dt.columnWidths, function(size, cell) {
                 head.cells[cell].node.style.width = (size / dt.rect.width * 100) + "%";
             });
+        },
+
+        cells: function() {
+            var that = this,
+                columns = [];
+
+            if (this.select.length == 1) {
+                this.select = this.select[0];
+            }
+
+            each(this.instance.table.rows, function(row, i) {
+                if (isArray(that.select)) {
+                    columns[i] = [];
+                }
+                each(row.cells, function(cell) {
+                    if (isArray(that.select) && that.select.indexOf(cell.index) >= 0) {
+                        columns[i].push(cell);
+                    } else if (that.select == cell.index) {
+                        columns.push(cell);
+                    }
+                });
+            });
+
+            return columns;
         }
     };
 
@@ -1084,10 +1229,7 @@
     var DataTable = function(table, config) {
         this.config = extend(defaultConfig, config);
 
-        this.API = {
-            rows: new Rows(this),
-            columns: new Columns(this)
-        };
+        this.node = table;
 
         if (this.config.ajax) {
             var that = this,
@@ -1126,6 +1268,7 @@
 
             this.init();
         }
+
     };
 
     DataTable.prototype = {
@@ -1136,6 +1279,9 @@
             var that = this,
                 o = that.config;
 
+            that.sortable = o.sortable;
+            that.searchable = o.searchable;
+
             that.currentPage = 1;
             that.onFirstPage = true;
             that.onLastPage = false;
@@ -1145,7 +1291,7 @@
 
             that.render();
 
-            if (o.fixedColumns) {
+            if (o.fixedColumns && that.table.hasHeader) {
                 that.columns().fix();
             }
 
@@ -1165,83 +1311,24 @@
             }
 
             // Check for the columns option
-            if (o.columns) {
-                var selectedColumns = [];
-                var columnRenderers = [];
-
-                each(o.columns, function(data) {
-                    // convert single column selection to array
-                    if (!isArray(data.select)) {
-                        data.select = [data.select];
-                    }
-
-                    if (isset(data, "render") && typeof data.render === "function") {
-                        selectedColumns = selectedColumns.concat(data.select);
-
-                        columnRenderers.push({
-                            columns: data.select,
-                            renderer: data.render
-                        });
-                    }
-
-                    // Add the data attributes to the th elements
-                    if (that.table.hasHeader) {
-                        each(data.select, function(column) {
-                            var cell = that.table.header.cells[column];
-
-                            if (data.type) {
-                                cell.node.setAttribute("data-type", data.type);
-                            }
-                            if (data.format) {
-                                cell.node.setAttribute("data-format", data.format);
-                            }
-                            if (isset(data, "sortable")) {
-                                cell.node.setAttribute("data-sortable", data.sortable);
-
-                                if (data.sortable === false) {
-                                    classList.remove(cell.node, o.classes.sorter);
-                                }
-                            }
-
-                            if (isset(data, "hidden")) {
-                                if (data.hidden !== false) {
-                                    that.columns().hide(column);
-                                }
-                            }
-
-                            if (isset(data, "sort") && data.select.length === 1) {
-                                that.columns().sort(data.select[0], data.sort);
-                            }
-                        });
-                    }
-                });
-
-                if (selectedColumns.length) {
-                    each(that.table.rows, function(row) {
-                        each(row.cells, function(cell) {
-                            if (selectedColumns.indexOf(cell.index) >= 0) {
-                                each(columnRenderers, function(obj) {
-                                    if (obj.columns.indexOf(cell.index) >= 0) {
-                                        cell.setContent(obj.renderer.call(that, cell.content, cell, row));
-                                    }
-                                });
-                            }
-                        });
-                    });
-                }
-            }
+            that.columns().init();
 
             that.rows().render();
 
             that.bindEvents();
 
+            that.setClasses();
+
             that.initialised = true;
 
             setTimeout(function() {
-                that.API.rows.init();
-                that.API.columns.init();
                 that.emit("init");
             }, 10);
+        },
+
+        setClasses: function() {
+            classList.toggle(this.wrapper, "dt-sortable", this.sortable);
+            classList.toggle(this.wrapper, "dt-searchable", this.searchable);
         },
 
         extend: function() {
@@ -1264,7 +1351,7 @@
                 o = that.config;
 
             on(that.wrapper, "mousedown", function(e) {
-                if (e.which === 1 && o.sortable && e.target.nodeName === "TH") {
+                if (e.which === 1 && that.sortable && e.target.nodeName === "TH") {
                     classList.add(e.target, "loading");
                 }
             });
@@ -1277,7 +1364,7 @@
                     that.page(parseInt(node.getAttribute("data-page"), 10));
                 }
 
-                if (o.sortable && node.nodeName === "TH" && classList.contains(node, o.classes.sorter)) {
+                if (that.sortable && node.nodeName === "TH" && classList.contains(node, o.classes.sorter)) {
                     if (node.hasAttribute("data-sortable") && node.getAttribute("data-sortable") === "false") return false;
 
                     e.preventDefault();
@@ -1295,20 +1382,12 @@
                         classList.contains(node, o.classes.selector)
                     ) {
                         e.preventDefault();
-                        that.config.perPage = parseInt(node.value, 10);
-
-                        if (that.selectors.length > 1) {
-                            each([].slice.call(that.selectors), function(select) {
-                                select.selectedIndex = node.selectedIndex;
-                            });
-                        }
-
-                        that.update();
+                        that.setPerPage(node.value);
                     }
                 });
             }
 
-            if (o.searchable) {
+            if (that.searchable) {
                 on(that.wrapper, "keyup", function(e) {
                     if (
                         e.target.nodeName === "INPUT" &&
@@ -1320,7 +1399,7 @@
                 });
             }
 
-            if (o.sortable) {
+            if (that.sortable) {
                 on(that.wrapper, "mousedown", function(e) {
                     if (e.target.nodeName === "TH") {
                         e.preventDefault();
@@ -1390,7 +1469,7 @@
             }
 
             // Searchable
-            if (o.searchable) {
+            if (that.searchable) {
                 var form = [
                     "<div class='", o.classes.search, "'>",
                     "<input class='", o.classes.input, "' placeholder='", o.labels.placeholder, "' type='text'>",
@@ -1450,19 +1529,36 @@
             this.emit("update");
         },
 
-        getInfo: function() {
+        fixHeight: function() {
+            this.container.style.height = null;
+            if (this.config.fixedHeight) {
+                this.rect = this.container.getBoundingClientRect();
+                this.container.style.height = this.rect.height + "px";
+            }
+        },
+
+        getInfo: function(data) {
             // Update the info
             var current = 0,
                 f = 0,
                 t = 0,
+                l = 0,
                 items;
 
-            if (this.totalPages) {
-                current = this.currentPage - 1;
-                f = current * this.config.perPage;
-                t = f + this.pages[current].length;
+            if (data) {
+                current = data.page - 1;
+                f = current * data.perpage;
+                t = f + data.data.length;
                 f = f + 1;
-                items = !!this.searching ? this.searchData.length : this.rows().count();
+                items = data.rows;
+            } else {
+                if (this.totalPages) {
+                    current = this.currentPage - 1;
+                    f = current * this.config.perPage;
+                    t = f + this.pages[current].length;
+                    f = f + 1;
+                    items = !!this.searching ? this.searchData.length : this.rows().count();
+                }
             }
 
             if (this.labels.length && this.config.labels.info.length) {
@@ -1563,7 +1659,7 @@
                 return false;
             }
 
-            this.rows().render(page);
+            this.rows().render(parseInt(page, 10));
 
             this.emit("page", page);
         },
@@ -1584,6 +1680,36 @@
             this.update();
 
             this.emit("reset");
+        },
+
+        set: function(prop, val) {
+            if (this.hasOwnProperty(prop)) {
+                this[prop] = val;
+
+                classList.toggle(this.wrapper, "dt-" + prop, this[prop]);
+
+                this.update();
+            }
+        },
+
+        setPerPage: function(value) {
+            if (!isNaN(value)) {
+                value = parseInt(value, 10);
+
+                this.config.perPage = value;
+
+                this.fixHeight();
+
+                if (this.config.perPageSelect.indexOf(value) >= 0) {
+                    each([].slice.call(this.selectors), function(select) {
+                        select.value = value;
+                    });
+                }
+
+                this.update();
+
+                this.emit("perpage", value);
+            }
         },
 
         import: function(options) {
@@ -1663,9 +1789,20 @@
                 }
 
                 if (obj) {
-                    each(obj.headings, function(heading, i) {
-                        that.table.header.cells[i].setContent(heading);
-                    });
+                    if (obj.headings) {
+                        if (!this.table.hasHeader) {
+                            this.table.addHeader(obj.headings, true);
+                        }
+                        each(obj.headings, function(heading, i) {
+                            that.table.header.cells[i].setContent(heading);
+                        });
+
+                        this.columns().init();
+                    }
+
+                    if (!this.table.rows.length) {
+                        this.currentPage = 1;
+                    }
 
                     this.rows().add(obj.data);
                 }
@@ -1694,12 +1831,12 @@
             this.table.body.appendChild(node);
         },
 
-        columns: function() {
-            return this.API.columns;
+        columns: function(select) {
+            return new Columns(this, select);
         },
 
-        rows: function() {
-            return this.API.rows;
+        rows: function(select) {
+            return new Rows(this, select);
         },
 
         on: function(event, callback) {
@@ -1748,6 +1885,14 @@
 
             this.rendered = false;
             this.initialised = false;
+
+            each(extensions, function(ext) {
+                if (that[ext] !== undefined && typeof that[ext] === "function") {
+                    if (that[ext].destroy && typeof that[ext].destroy === "function") {
+                        that[ext].destroy();
+                    }
+                }
+            });
         }
     };
 
