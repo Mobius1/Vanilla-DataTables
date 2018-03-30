@@ -27,7 +27,8 @@
      * Default configuration
      * @typ {Object}
      */
-    var defaultConfig = {
+    function defaultConfig() {
+      return {
         perPage: 10,
         perPageSelect: [5, 10, 15, 20, 25],
 
@@ -66,7 +67,8 @@
             top: "{select}{search}",
             bottom: "{info}{pager}"
         }
-    };
+      };
+    }
 
     /**
      * Check is item is object
@@ -951,7 +953,7 @@
         this.initialized = false;
 
         // user options
-        this.options = extend(defaultConfig, options);
+        this.options = extend(defaultConfig(), options);
 
         if (typeof table === "string") {
             table = document.querySelector(table);
