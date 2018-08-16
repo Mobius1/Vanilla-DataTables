@@ -28,13 +28,13 @@
      * @typ {Object}
      */
     var defaultConfig = {
-        perPage: 10,
-        perPageSelect: [5, 10, 15, 20, 25],
-
         sortable: true,
         searchable: true,
 
         // Pagination
+        paging: true,
+        perPage: 10,
+        perPageSelect: [5, 10, 15, 20, 25],
         nextPrev: true,
         firstLast: false,
         prevText: "&lsaquo;",
@@ -46,6 +46,8 @@
         descText: "▾",
         truncatePager: true,
         pagerDelta: 2,
+
+        scrollY: "",
 
         fixedColumns: true,
         fixedHeight: false,
@@ -476,8 +478,8 @@
 
         // Order the row cells
         each(dt.data, function (row, i) {
-            c = row.cloneNode();
-            d = row.cloneNode();
+            c = row.cloneNode(false);
+            d = row.cloneNode(false);
 
             c.dataIndex = d.dataIndex = i;
 
@@ -669,37 +671,30 @@
     /**
      * Sort by column
      * @param  {int} column - The column no.
-     * @param  {string} direction - asc or desc
+     * @param  {string} dir - asc or desc
      * @return {void}
      */
-    Columns.prototype.sort = function (column, direction, init) {
-
+    Columns.prototype.sort = function (column, dir, init) {
         var dt = this.dt;
 
         // Check column is present
-        if (dt.hasHeadings && (column < 1 || column > dt.activeHeadings.length)) {
+        if (dt.hasHeadings && (column < 0 || column > dt.headings.length)) {
             return false;
         }
 
         dt.sorting = true;
 
-        // Convert to zero-indexed
-        column = column - 1;
-
-        var dir,
-            rows = dt.data,
+        var rows = dt.data,
             alpha = [],
             numeric = [],
             a = 0,
             n = 0,
-            th = dt.activeHeadings[column];
-
-        column = th.originalCellIndex;
+            th = dt.headings[column];
 
         each(rows, function (tr) {
             var cell = tr.cells[column];
-            var content = cell.hasAttribute('data-content') ? cell.getAttribute('data-content') : cell.data;
-            var num = content.replace(/(\$|\,|\s|%)/g, "");
+            var content = cell.hasAttribute('data-content') ? cell.getAttribute('data-content') : cell.innerText;
+            var num = typeof content==="string" ? content.replace(/(\$|\,|\s|%)/g, "") : content;
 
             // Check for date format and moment.js
             if (th.getAttribute("data-type") === "date" && win.moment) {
@@ -727,17 +722,22 @@
         });
 
         /* Sort according to direction (ascending or descending) */
+        if (!dir) {
+            if (classList.contains(th, "asc")) {
+                dir = "desc";
+            } else {
+                dir = "asc";
+            }
+        }
         var top, btm;
-        if (classList.contains(th, "asc") || direction == "asc") {
+        if (dir == "desc") {
             top = sortItems(alpha, -1);
             btm = sortItems(numeric, -1);
-            dir = "descending";
             classList.remove(th, "asc");
             classList.add(th, "desc");
         } else {
             top = sortItems(numeric, 1);
             btm = sortItems(alpha, 1);
-            dir = "ascending";
             classList.remove(th, "desc");
             classList.add(th, "asc");
         }
@@ -796,8 +796,8 @@
 
         // Loop over the rows and reorder the cells
         each(dt.data, function (row, i) {
-            a = row.cloneNode();
-            b = row.cloneNode();
+            a = row.cloneNode(false);
+            b = row.cloneNode(false);
 
             a.dataIndex = b.dataIndex = i;
 
@@ -811,9 +811,9 @@
                 c.data = cell.data;
                 a.appendChild(c);
 
-                if (dt.hiddenColumns.indexOf(cell.cellIndex) < 0) {
-                    d = cell.cloneNode(true);
-                    d.data = cell.data;
+                if (dt.hiddenColumns.indexOf(c.cellIndex) < 0) {
+                    d = c.cloneNode(true);
+                    d.data = c.data;
                     b.appendChild(d);
                 }
             });
@@ -846,7 +846,7 @@
      * @return {HTMLElement}
      */
     Rows.prototype.build = function (row) {
-        var td, tr = createElement("tr");
+        var tr = createElement("tr");
 
         var headings = this.dt.headings;
 
@@ -857,10 +857,10 @@
         }
 
         each(headings, function (h, i) {
-            td = createElement("td");
+            var td = createElement("td");
 
             // Fixes #29
-            if (!row[i] && !row[i].length) {
+            if (!row[i] || !row[i].length) {
                 row[i] = "";
             }
 
@@ -1210,16 +1210,20 @@
         template += "<div class='dataTable-top'>";
         template += o.layout.top;
         template += "</div>";
-        template += "<div class='dataTable-container'></div>";
+        if (o.scrollY.length) {
+            template += "<div class='dataTable-container' style='height: " + o.scrollY + "; overflow-Y: auto;'></div>";
+        } else {
+            template += "<div class='dataTable-container'></div>";
+        }
         template += "<div class='dataTable-bottom'>";
         template += o.layout.bottom;
         template += "</div>";
 
         // Info placement
-        template = template.replace("{info}", "<div class='dataTable-info'></div>");
+        template = template.replace("{info}", o.paging ? "<div class='dataTable-info'></div>" : "");
 
         // Per Page Select
-        if (o.perPageSelect) {
+        if (o.paging && o.perPageSelect) {
             var wrap = "<div class='dataTable-dropdown'><label>";
             wrap += o.labels.perPage;
             wrap += "</label></div>";
@@ -1342,6 +1346,15 @@
      * @return {Void}
      */
     proto.renderPage = function () {
+        if (this.hasHeadings) {
+            flush(this.header, this.isIE);
+
+            each(this.activeHeadings, function (th) {
+                this.header.appendChild(th);
+            }, this);
+        }
+
+
         if (this.hasRows && this.totalPages) {
             if (this.currentPage > this.totalPages) {
                 this.currentPage = 1;
@@ -1350,14 +1363,6 @@
             // Use a fragment to limit touching the DOM
             var index = this.currentPage - 1,
                 frag = doc.createDocumentFragment();
-
-            if (this.hasHeadings) {
-                flush(this.header, this.isIE);
-
-                each(this.activeHeadings, function (th) {
-                    this.header.appendChild(th);
-                }, this);
-            }
 
             each(this.pages[index], function (row) {
                 frag.appendChild(this.rows().render(row));
@@ -1368,7 +1373,7 @@
             this.onFirstPage = this.currentPage === 1;
             this.onLastPage = this.currentPage === this.lastPage;
         } else {
-            this.clear();
+            this.setMessage(this.options.labels.noRows);
         }
 
         // Update the info
@@ -1555,6 +1560,11 @@
                 }
             }
         });
+
+        on(win, "resize", function(e){
+            that.rect = that.container.getBoundingClientRect();
+            that.fixColumns();
+        });
     };
 
     /**
@@ -1607,7 +1617,7 @@
 
                     if (data.hasOwnProperty("hidden")) {
                         if (data.hidden !== false) {
-                            that.columns().hide(column);
+                            that.columns().hide([column]);
                         }
                     }
 
@@ -1705,14 +1715,18 @@
             }, this);
         }
 
-        // Check for hidden columns
-        this.pages = rows
-            .map(function (tr, i) {
-                return i % perPage === 0 ? rows.slice(i, i + perPage) : null;
-            })
-            .filter(function (page) {
-                return page;
-            });
+        if (this.options.paging) {
+            // Check for hidden columns
+            this.pages = rows
+                .map(function (tr, i) {
+                    return i % perPage === 0 ? rows.slice(i, i + perPage) : null;
+                })
+                .filter(function (page) {
+                    return page;
+                });
+        } else {
+            this.pages = [rows];
+        }
 
         this.totalPages = this.lastPage = this.pages.length;
 
@@ -1725,16 +1739,25 @@
      */
     proto.fixColumns = function () {
 
-        if (this.options.fixedColumns && this.activeHeadings && this.activeHeadings.length) {
-
+        if ((this.options.scrollY.length || this.options.fixedColumns) && this.activeHeadings && this.activeHeadings.length) {
             var cells,
                 hd = false;
-
             this.columnWidths = [];
 
             // If we have headings we need only set the widths on them
             // otherwise we need a temp header and the widths need applying to all cells
             if (this.table.tHead) {
+
+                if (this.options.scrollY.length) {
+                    hd = createElement("thead");
+                    hd.appendChild(createElement("tr"));
+                    hd.style.height = '0px';
+                    if (this.headerTable) {
+                        // move real header back into place
+                        this.table.tHead = this.headerTable.tHead;
+                    }
+                }
+
                 // Reset widths
                 each(this.activeHeadings, function (cell) {
                     cell.style.width = "";
@@ -1745,7 +1768,41 @@
                     var w = ow / this.rect.width * 100;
                     cell.style.width = w + "%";
                     this.columnWidths[i] = ow;
+                    if (this.options.scrollY.length) {
+                        var th = createElement("th");
+                        hd.firstElementChild.appendChild(th);
+                        th.style.width = w + "%";
+                        th.style.paddingTop = "0";
+                        th.style.paddingBottom = "0";
+                        th.style.border = "0";
+                    }
                 }, this);
+
+                if (this.options.scrollY.length) {
+                    var container = this.table.parentElement;
+                    if (!this.headerTable) {
+                        this.headerTable = createElement("table", {
+                            class: "dataTable-table"
+                        });
+                        var headercontainer = createElement("div", {
+                            class: "dataTable-headercontainer"
+                        });
+                        headercontainer.appendChild(this.headerTable);
+                        container.parentElement.insertBefore(headercontainer, container);
+                    }
+                    var thd = this.table.tHead;
+                    this.table.replaceChild(hd, thd);
+                    this.headerTable.tHead = thd;
+
+                    // Compensate for scrollbars.
+                    this.headerTable.style.paddingRight = this.headerTable.clientWidth - this.table.clientWidth + "px";
+
+                    if (container.scrollHeight > container.clientHeight) {
+                        // scrollbars on one page means scrollbars on all pages.
+                        container.style.overflowY = 'scroll';
+                    }
+                }
+
             } else {
                 cells = [];
 
@@ -1860,9 +1917,9 @@
             classList.remove(that.wrapper, "search-results");
 
             that.setMessage(that.options.labels.noRows);
-        } else {
-            that.update();
         }
+
+        that.update();
 
         this.emit("datatable.search", query, this.searchData);
     };
@@ -1935,6 +1992,9 @@
 
                     // Allow sorting on new header
                     that.render("header");
+
+                    // Activate newly added headings
+                    that.activeHeadings = that.headings.slice();
                 }
             }
 
@@ -2085,6 +2145,8 @@
                                 text = text.replace(/\s{2,}/g, ' ');
                                 text = text.replace(/\n/g, '  ');
                                 text = text.replace(/"/g, '""');
+                                //have to manually encode "#" as encodeURI leaves it as is.
+                                text = text.replace(/#/g, "%23");
                                 if (text.indexOf(",") > -1)
                                     text = '"' + text + '"';
 
@@ -2194,13 +2256,13 @@
                     link.download = o.filename;
 
                     // Append the link
-                    body.appendChild(link);
+                    document.body.appendChild(link);
 
                     // Trigger the download
                     link.click();
 
                     // Remove the link
-                    body.removeChild(link);
+                    document.body.removeChild(link);
                 }
 
                 return str;
@@ -2354,6 +2416,8 @@
 
         if (this.hasRows) {
             colspan = this.data[0].cells.length;
+        } else if (this.activeHeadings.length) {
+            colspan = this.activeHeadings.length;
         }
 
         classList.add(this.wrapper, "dataTable-empty");
