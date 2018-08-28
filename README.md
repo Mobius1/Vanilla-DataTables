@@ -3,7 +3,7 @@
 
 ---
 
-### **Due to time constraints this repo is no longer maintained.**
+### **Due to time constraints this repo is no longer maintained. Feel free to fork this repo and make it your own.**
 
 ---
 
@@ -26,7 +26,7 @@ A lightweight, extendable, dependency-free javascript HTML table plugin. Similar
 * Extentable with custom plugins [See the wiki](https://github.com/Mobius1/Vanilla-DataTables/wiki/Plugins) (v1.6.0 and above)
 
 
-[Documentation](https://github.com/Mobius1/Vanilla-DataTables/wiki) | [Latest Version](https://github.com/Mobius1/Vanilla-DataTables/releases/tag/1.6.14)
+[Documentation](https://github.com/Mobius1/Vanilla-DataTables/wiki) | [Latest Version](https://github.com/Mobius1/Vanilla-DataTables/releases/tag/1.6.15)
 
 ---
 
