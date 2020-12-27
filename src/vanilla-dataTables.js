@@ -65,7 +65,13 @@
         layout: {
             top: "{select}{search}",
             bottom: "{info}{pager}"
-        }
+        },
+
+        /** 
+         * Customise columns to search 
+         * @type {Array}
+         */
+        columnsToSearch: false
     };
 
     /**
@@ -1804,13 +1810,13 @@
         if (!this.hasRows) return false;
 
         var that = this;
-
+ 
         query = query.toLowerCase();
 
         this.currentPage = 1;
         this.searching = true;
         this.searchData = [];
-
+  
         if (!query.length) {
             this.searching = false;
             this.update();
@@ -1818,34 +1824,46 @@
             classList.remove(this.wrapper, "search-results");
             return false;
         }
-
+  
         this.clear();
-
+  
         each(this.data, function (row, idx) {
             var inArray = this.searchData.indexOf(row) > -1;
-
+  
             // https://github.com/Mobius1/Vanilla-DataTables/issues/12
             var doesQueryMatch = query.split(" ").reduce(function (bool, word) {
                 var includes = false,
                     cell = null,
                     content = null;
-
-                for (var x = 0; x < row.cells.length; x++) {
-                    cell = row.cells[x];
-                    content = cell.hasAttribute('data-content') ? cell.getAttribute('data-content') : cell.textContent;
-
-                    if (
-                        content.toLowerCase().indexOf(word) > -1 &&
-                        that.columns(cell.cellIndex).visible()
-                    ) {
-                        includes = true;
-                        break;
+  
+                if (that.options.columnsToSearch) {
+                    that.options.columnsToSearch.forEach(e => {
+                        cell = row.cells[e];
+                        content = cell.hasAttribute('data-content') ? cell.getAttribute('data-content') : cell.textContent;
+      
+                        if (
+                            content.toLowerCase().indexOf(word) > -1 && that.columns(cell.cellIndex).visible()
+                        ) {
+                            includes = true;
+                        }
+                    });
+                } else {
+                    for (var x = 0; x < row.cells.length; x++) {
+                        cell = row.cells[x];
+                        content = cell.hasAttribute('data-content') ? cell.getAttribute('data-content') : cell.textContent;
+  
+                        if (
+                            content.toLowerCase().indexOf(word) > -1 && that.columns(cell.cellIndex).visible()
+                        ) {
+                            includes = true;
+                            break;
+                        }
                     }
                 }
-
+  
                 return bool && includes;
             }, true);
-
+  
             if (doesQueryMatch && !inArray) {
                 row.searchIndex = idx;
                 this.searchData.push(idx);
@@ -1853,17 +1871,17 @@
                 row.searchIndex = null;
             }
         }, this);
-
+  
         classList.add(this.wrapper, "search-results");
-
+  
         if (!that.searchData.length) {
             classList.remove(that.wrapper, "search-results");
-
+  
             that.setMessage(that.options.labels.noRows);
         } else {
             that.update();
         }
-
+  
         this.emit("datatable.search", query, this.searchData);
     };
 
